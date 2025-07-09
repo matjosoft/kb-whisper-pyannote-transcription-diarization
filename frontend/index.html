@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Scribe AI</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <span class="logo-icon">📊</span>
+                    <h1>KB-whisper/Pyannote demo</h1>
+                </div>
+                <p class="subtitle">Record audio, transcribe, diarize, and timestamp</p>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Recording Section -->
+            <section class="recording-section">
+                <div class="recording-controls">
+                    <button id="recordBtn" class="record-btn">
+                        <span class="record-icon">🎙️</span>
+                        Start Recording
+                    </button>
+                    <div id="recordingStatus" class="recording-status hidden">
+                        <span class="recording-indicator"></span>
+                        <span id="recordingTime">Last recording duration: 00:17</span>
+                    </div>
+                </div>
+                
+                <div id="recordingInfo" class="recording-info hidden">
+                    <span id="recordingDetails">Recorded: audio/webm;codecs=opus, Size: 279.34 KB</span>
+                </div>
+            </section>
+
+            <!-- File Upload Section -->
+            <section class="upload-section">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-content">
+                        <span class="upload-icon">📁</span>
+                        <p>Drop audio file here or click to browse</p>
+                        <input type="file" id="fileInput" accept="audio/*" hidden>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Processing Section -->
+            <section class="processing-section hidden" id="processingSection">
+                <div class="processing-content">
+                    <div class="spinner"></div>
+                    <p id="processingText">Processing audio...</p>
+                    
+                    <!-- Chunk Progress Visualization -->
+                    <div class="chunk-progress-container hidden" id="chunkProgressContainer">
+                        <div class="progress-header">
+                            <h3>🎵 Processing Audio Chunks</h3>
+                            <div class="progress-stats">
+                                <span id="progressStats">0 / 0 chunks processed</span>
+                                <span id="progressTime">Duration: 0.0s</span>
+                            </div>
+                        </div>
+                        
+                        <div class="overall-progress">
+                            <div class="progress-bar-container">
+                                <div class="progress-bar-fill" id="overallProgressFill"></div>
+                                <div class="progress-percentage" id="overallProgressPercentage">0%</div>
+                            </div>
+                        </div>
+                        
+                        <div class="chunks-visualization" id="chunksVisualization">
+                            <!-- Chunk blocks will be dynamically generated -->
+                        </div>
+                        
+                        <div class="current-chunk-info" id="currentChunkInfo">
+                            <div class="chunk-details">
+                                <span class="chunk-label">Current:</span>
+                                <span class="chunk-text" id="currentChunkText">Preparing...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-section hidden" id="resultsSection">
+                <div class="results-header">
+                    <h2>Transcription Result</h2>
+                    <div class="results-actions">
+                        <button id="exportBtn" class="action-btn export-btn">
+                            <span>📤</span> Export
+                        </button>
+                        <button id="clearBtn" class="action-btn clear-btn">
+                            <span>🗑️</span> Clear
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Speaker Names Editor -->
+                <div class="speaker-editor" id="speakerEditor">
+                    <h3>✏️ Edit Speaker Names</h3>
+                    <div id="speakerInputs" class="speaker-inputs">
+                        <!-- Speaker inputs will be dynamically generated -->
+                    </div>
+                </div>
+
+                <!-- Karaoke Player -->
+                <div class="karaoke-player" id="karaokePlayer">
+                    <div class="karaoke-header">
+                        <h3>🎵 Karaoke Player</h3>
+                        <div class="karaoke-controls">
+                            <button id="karaokeToggleBtn" class="karaoke-toggle-btn">
+                                <span>🎵</span> Show Karaoke View
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="karaoke-content hidden" id="karaokeContent">
+                        <!-- Audio Controls -->
+                        <div class="audio-controls">
+                            <button id="playPauseBtn" class="control-btn play-pause-btn">
+                                <span class="play-icon">▶️</span>
+                            </button>
+                            <div class="time-display">
+                                <span id="currentTime">00:00</span>
+                                <span>/</span>
+                                <span id="totalTime">00:00</span>
+                            </div>
+                            <div class="progress-container">
+                                <div class="progress-bar" id="progressBar">
+                                    <div class="progress-fill" id="progressFill"></div>
+                                    <div class="progress-handle" id="progressHandle"></div>
+                                </div>
+                            </div>
+                            <div class="volume-control">
+                                <span>🔊</span>
+                                <input type="range" id="volumeSlider" min="0" max="100" value="100" class="volume-slider">
+                            </div>
+                        </div>
+
+                        <!-- Speaker Lanes -->
+                        <div class="speaker-lanes" id="speakerLanes">
+                            <!-- Speaker lanes will be dynamically generated -->
+                        </div>
+
+                        <!-- Current Text Display -->
+                        <div class="current-text-display">
+                            <div class="current-speaker" id="currentSpeaker">Speaker</div>
+                            <div class="current-text" id="currentText">Audio text will appear here as it plays...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Transcription Display -->
+                <div class="transcription-display" id="transcriptionDisplay">
+                    <!-- Transcription segments will be dynamically generated -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/static/js/recorder.js"></script>
+    <script src="/static/js/karaoke-player.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

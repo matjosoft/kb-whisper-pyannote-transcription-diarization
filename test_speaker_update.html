@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speaker Name Update Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .speaker-input-group {
+            margin: 10px 0;
+        }
+        .speaker-input-group label {
+            display: inline-block;
+            width: 100px;
+            font-weight: bold;
+        }
+        .speaker-input-group input {
+            padding: 5px;
+            margin-left: 10px;
+            width: 200px;
+        }
+        .karaoke-player {
+            margin: 20px 0;
+        }
+        .speaker-lanes {
+            border: 1px solid #ccc;
+            min-height: 100px;
+            padding: 10px;
+            background: #f9f9f9;
+        }
+        .speaker-lane {
+            margin: 10px 0;
+            padding: 5px;
+            background: white;
+            border-radius: 3px;
+        }
+        .speaker-label {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .current-speaker {
+            font-weight: bold;
+            color: #007bff;
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Speaker Name Update Test</h1>
+    
+    <div class="test-section">
+        <h2>Test Data</h2>
+        <p>This test simulates the speaker name editing functionality without requiring actual audio processing.</p>
+        <button class="test-button" onclick="loadTestData()">Load Test Data</button>
+        <button class="test-button" onclick="clearTest()">Clear Test</button>
+    </div>
+
+    <div class="test-section">
+        <h2>Speaker Editor</h2>
+        <div id="speakerInputs">
+            <!-- Speaker inputs will be generated here -->
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Karaoke Player</h2>
+        <div class="karaoke-player" id="karaokePlayer">
+            <button id="karaokeToggleBtn" class="test-button">
+                <span>🎵</span> Show Karaoke View
+            </button>
+            
+            <div class="karaoke-content hidden" id="karaokeContent">
+                <div class="speaker-lanes" id="speakerLanes">
+                    <!-- Speaker lanes will be generated here -->
+                </div>
+                
+                <div class="current-text-display">
+                    <div class="current-speaker" id="currentSpeaker">Speaker</div>
+                    <div class="current-text" id="currentText">Audio text will appear here as it plays...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test Results</h2>
+        <div id="testResults">
+            <p>Load test data and edit speaker names to see the updates in real-time.</p>
+        </div>
+    </div>
+
+    <script>
+        // Simplified KaraokePlayer for testing
+        class TestKaraokePlayer {
+            constructor() {
+                this.segments = [];
+                this.isVisible = false;
+                this.initializeElements();
+                this.setupEventListeners();
+            }
+
+            initializeElements() {
+                this.karaokeToggleBtn = document.getElementById('karaokeToggleBtn');
+                this.karaokeContent = document.getElementById('karaokeContent');
+                this.speakerLanes = document.getElementById('speakerLanes');
+                this.currentSpeaker = document.getElementById('currentSpeaker');
+                this.currentText = document.getElementById('currentText');
+            }
+
+            setupEventListeners() {
+                this.karaokeToggleBtn.addEventListener('click', () => this.toggleKaraokeView());
+            }
+
+            toggleKaraokeView() {
+                this.isVisible = !this.isVisible;
+                
+                if (this.isVisible) {
+                    this.karaokeContent.classList.remove('hidden');
+                    this.karaokeToggleBtn.innerHTML = '<span>🎵</span> Hide Karaoke View';
+                } else {
+                    this.karaokeContent.classList.add('hidden');
+                    this.karaokeToggleBtn.innerHTML = '<span>🎵</span> Show Karaoke View';
+                }
+            }
+
+            loadTranscriptionResults(results) {
+                this.segments = results.segments;
+                this.createSpeakerLanes();
+            }
+
+            createSpeakerLanes() {
+                if (!this.segments || this.segments.length === 0) {
+                    this.speakerLanes.innerHTML = '<p>No transcription data available</p>';
+                    return;
+                }
+
+                const speakers = [...new Set(this.segments.map(seg => seg.speaker))];
+                
+                this.speakerLanes.innerHTML = '';
+                
+                speakers.forEach((speaker, index) => {
+                    const laneDiv = document.createElement('div');
+                    laneDiv.className = 'speaker-lane';
+                    
+                    const labelDiv = document.createElement('div');
+                    labelDiv.className = 'speaker-label';
+                    labelDiv.textContent = speaker;
+                    
+                    const segmentsDiv = document.createElement('div');
+                    const speakerSegments = this.segments.filter(seg => seg.speaker === speaker);
+                    segmentsDiv.textContent = `${speakerSegments.length} segments: ${speakerSegments.map(s => s.text).join(' | ')}`;
+                    
+                    laneDiv.appendChild(labelDiv);
+                    laneDiv.appendChild(segmentsDiv);
+                    this.speakerLanes.appendChild(laneDiv);
+                });
+            }
+
+            updateSpeakerNames(speakerNames) {
+                if (!this.segments || this.segments.length === 0) {
+                    return;
+                }
+
+                // Store original speaker IDs to preserve mapping
+                if (!this.originalSpeakerIds) {
+                    this.originalSpeakerIds = {};
+                    this.segments.forEach(segment => {
+                        if (!this.originalSpeakerIds[segment.speaker]) {
+                            this.originalSpeakerIds[segment.speaker] = segment.speaker;
+                        }
+                    });
+                }
+
+                // Update segments with new speaker names
+                this.segments = this.segments.map(segment => {
+                    const originalId = this.originalSpeakerIds[segment.speaker] || segment.speaker;
+                    return {
+                        ...segment,
+                        speaker: speakerNames[originalId] || segment.speaker,
+                        originalSpeakerId: originalId
+                    };
+                });
+
+                // Recreate speaker lanes with updated names
+                this.createSpeakerLanes();
+
+                // Update test results
+                updateTestResults();
+            }
+        }
+
+        // Test application
+        let karaokePlayer = new TestKaraokePlayer();
+        let speakerNames = {};
+        let currentResults = null;
+
+        function loadTestData() {
+            // Sample test data
+            currentResults = {
+                segments: [
+                    { speaker: 'SPEAKER_00', text: 'Hello, welcome to our meeting.', start: 0, end: 3 },
+                    { speaker: 'SPEAKER_01', text: 'Thank you for having me.', start: 3.5, end: 6 },
+                    { speaker: 'SPEAKER_00', text: 'Let\'s discuss the project timeline.', start: 6.5, end: 9 },
+                    { speaker: 'SPEAKER_02', text: 'I have some concerns about the deadline.', start: 9.5, end: 12 },
+                    { speaker: 'SPEAKER_01', text: 'We can work together to find solutions.', start: 12.5, end: 15 }
+                ],
+                speakers: {
+                    'SPEAKER_00': 'SPEAKER_00',
+                    'SPEAKER_01': 'SPEAKER_01', 
+                    'SPEAKER_02': 'SPEAKER_02'
+                }
+            };
+
+            speakerNames = { ...currentResults.speakers };
+            createSpeakerEditor(currentResults.speakers);
+            karaokePlayer.loadTranscriptionResults(currentResults);
+            updateTestResults();
+        }
+
+        function createSpeakerEditor(speakers) {
+            const speakerInputs = document.getElementById('speakerInputs');
+            speakerInputs.innerHTML = '';
+            
+            Object.keys(speakers).forEach(speakerId => {
+                const inputGroup = document.createElement('div');
+                inputGroup.className = 'speaker-input-group';
+                
+                const label = document.createElement('label');
+                label.textContent = speakerId + ':';
+                
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.value = speakers[speakerId];
+                input.placeholder = `Enter name for ${speakerId}`;
+                input.addEventListener('input', (e) => {
+                    speakerNames[speakerId] = e.target.value || speakerId;
+                    karaokePlayer.updateSpeakerNames(speakerNames);
+                });
+                
+                inputGroup.appendChild(label);
+                inputGroup.appendChild(input);
+                speakerInputs.appendChild(inputGroup);
+            });
+        }
+
+        function updateTestResults() {
+            const testResults = document.getElementById('testResults');
+            if (!currentResults) {
+                testResults.innerHTML = '<p>No test data loaded.</p>';
+                return;
+            }
+
+            let html = '<h3>Current Speaker Mappings:</h3><ul>';
+            Object.keys(speakerNames).forEach(id => {
+                html += `<li><strong>${id}</strong> → <em>${speakerNames[id]}</em></li>`;
+            });
+            html += '</ul>';
+
+            html += '<h3>Updated Segments:</h3><ul>';
+            karaokePlayer.segments.forEach((segment, index) => {
+                html += `<li><strong>${segment.speaker}:</strong> ${segment.text}</li>`;
+            });
+            html += '</ul>';
+
+            testResults.innerHTML = html;
+        }
+
+        function clearTest() {
+            currentResults = null;
+            speakerNames = {};
+            document.getElementById('speakerInputs').innerHTML = '';
+            document.getElementById('speakerLanes').innerHTML = '';
+            document.getElementById('testResults').innerHTML = '<p>Load test data and edit speaker names to see the updates in real-time.</p>';
+            karaokePlayer.karaokeContent.classList.add('hidden');
+            karaokePlayer.karaokeToggleBtn.innerHTML = '<span>🎵</span> Show Karaoke View';
+            karaokePlayer.isVisible = false;
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Direct Progress Test</title>
+    <link rel="stylesheet" href="frontend/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Direct Progress Test</h1>
+        <button onclick="testProgress()">Test Progress Animation</button>
+        <button onclick="resetProgress()">Reset</button>
+        
+        <!-- Processing Section -->
+        <section class="processing-section" id="processingSection">
+            <div class="processing-content">
+                <div class="spinner"></div>
+                <p id="processingText">Processing audio...</p>
+                
+                <!-- Chunk Progress Visualization -->
+                <div class="chunk-progress-container" id="chunkProgressContainer">
+                    <div class="progress-header">
+                        <h3>🎵 Processing Audio Chunks</h3>
+                        <div class="progress-stats">
+                            <span id="progressStats">0 / 0 chunks processed</span>
+                            <span id="progressTime">Duration: 0.0s</span>
+                        </div>
+                    </div>
+                    
+                    <div class="overall-progress">
+                        <div class="progress-bar-container">
+                            <div class="progress-bar-fill" id="overallProgressFill"></div>
+                            <div class="progress-percentage" id="overallProgressPercentage">0%</div>
+                        </div>
+                    </div>
+                    
+                    <div class="chunks-visualization" id="chunksVisualization">
+                        <!-- Chunk blocks will be dynamically generated -->
+                    </div>
+                    
+                    <div class="current-chunk-info" id="currentChunkInfo">
+                        <div class="chunk-details">
+                            <span class="chunk-label">Current:</span>
+                            <span class="chunk-text" id="currentChunkText">Preparing...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        function createChunkBlocks(totalChunks) {
+            const chunksVisualization = document.getElementById('chunksVisualization');
+            chunksVisualization.innerHTML = '';
+            
+            for (let i = 0; i < totalChunks; i++) {
+                const chunkBlock = document.createElement('div');
+                chunkBlock.className = 'chunk-block pending';
+                chunkBlock.textContent = i + 1;
+                chunkBlock.id = `chunk-${i}`;
+                chunkBlock.title = `Chunk ${i + 1}`;
+                chunksVisualization.appendChild(chunkBlock);
+            }
+        }
+        
+        function updateChunkBlock(chunkIndex, status) {
+            const chunkBlock = document.getElementById(`chunk-${chunkIndex}`);
+            if (chunkBlock) {
+                chunkBlock.className = `chunk-block ${status}`;
+            }
+        }
+        
+        function updateProgress(data) {
+            const progressStats = document.getElementById('progressStats');
+            const progressTime = document.getElementById('progressTime');
+            const currentChunkText = document.getElementById('currentChunkText');
+            const overallProgressFill = document.getElementById('overallProgressFill');
+            const overallProgressPercentage = document.getElementById('overallProgressPercentage');
+            
+            console.log('Updating progress:', data);
+            
+            if (currentChunkText) {
+                currentChunkText.textContent = data.message || 'Processing...';
+            }
+            
+            switch (data.status) {
+                case 'transcribing':
+                    if (data.total_chunks && data.duration) {
+                        if (progressStats) {
+                            progressStats.textContent = `0 / ${data.total_chunks} chunks processed`;
+                        }
+                        if (progressTime) {
+                            progressTime.textContent = `Duration: ${data.duration.toFixed(1)}s`;
+                        }
+                        createChunkBlocks(data.total_chunks);
+                    }
+                    break;
+                    
+                case 'processing_chunk':
+                    if (data.chunk_index !== undefined && data.total_chunks) {
+                        const completedChunks = data.chunk_index + 1;
+                        const totalChunks = data.total_chunks;
+                        const progressPercent = Math.round((completedChunks / totalChunks) * 100);
+                        
+                        if (progressStats) {
+                            progressStats.textContent = `${completedChunks} / ${totalChunks} chunks processed`;
+                        }
+                        if (overallProgressFill) {
+                            overallProgressFill.style.width = `${progressPercent}%`;
+                        }
+                        if (overallProgressPercentage) {
+                            overallProgressPercentage.textContent = `${progressPercent}%`;
+                        }
+                        
+                        // Update chunk visualization
+                        updateChunkBlock(data.chunk_index, 'processing');
+                        
+                        // Mark previous chunks as completed
+                        for (let i = 0; i < data.chunk_index; i++) {
+                            updateChunkBlock(i, 'completed');
+                        }
+                    }
+                    break;
+                    
+                case 'completed':
+                    if (overallProgressFill) {
+                        overallProgressFill.style.width = '100%';
+                    }
+                    if (overallProgressPercentage) {
+                        overallProgressPercentage.textContent = '100%';
+                    }
+                    if (currentChunkText) {
+                        currentChunkText.textContent = 'Transcription completed successfully!';
+                    }
+                    
+                    // Mark all chunks as completed
+                    const allChunks = document.querySelectorAll('.chunk-block');
+                    allChunks.forEach(chunk => {
+                        chunk.className = 'chunk-block completed';
+                    });
+                    break;
+            }
+        }
+        
+        function testProgress() {
+            console.log('Starting progress test...');
+            
+            // Show processing section
+            const processingSection = document.getElementById('processingSection');
+            const chunkProgressContainer = document.getElementById('chunkProgressContainer');
+            
+            processingSection.classList.remove('hidden');
+            chunkProgressContainer.classList.remove('hidden');
+            
+            // Simulate transcription progress
+            const totalChunks = 5;
+            updateProgress({
+                status: 'transcribing',
+                message: `Starting transcription in ${totalChunks} chunks...`,
+                total_chunks: totalChunks,
+                duration: 150.0
+            });
+            
+            // Simulate chunk processing
+            let currentChunk = 0;
+            const chunkInterval = setInterval(() => {
+                if (currentChunk < totalChunks) {
+                    const chunkStart = currentChunk * 30;
+                    const chunkEnd = Math.min((currentChunk + 1) * 30, 150);
+                    
+                    updateProgress({
+                        status: 'processing_chunk',
+                        chunk_index: currentChunk,
+                        chunk_start: chunkStart,
+                        chunk_end: chunkEnd,
+                        total_chunks: totalChunks,
+                        message: `Processing chunk ${currentChunk + 1}/${totalChunks} (${chunkStart}s - ${chunkEnd}s)`
+                    });
+                    
+                    currentChunk++;
+                } else {
+                    clearInterval(chunkInterval);
+                    setTimeout(() => {
+                        updateProgress({
+                            status: 'completed',
+                            message: 'Transcription completed successfully!'
+                        });
+                    }, 1000);
+                }
+            }, 1500); // Update every 1.5 seconds for visible progress
+        }
+        
+        function resetProgress() {
+            const processingSection = document.getElementById('processingSection');
+            const chunkProgressContainer = document.getElementById('chunkProgressContainer');
+            const chunksVisualization = document.getElementById('chunksVisualization');
+            const overallProgressFill = document.getElementById('overallProgressFill');
+            const overallProgressPercentage = document.getElementById('overallProgressPercentage');
+            const progressStats = document.getElementById('progressStats');
+            const progressTime = document.getElementById('progressTime');
+            const currentChunkText = document.getElementById('currentChunkText');
+            
+            processingSection.classList.add('hidden');
+            chunkProgressContainer.classList.add('hidden');
+            
+            if (chunksVisualization) chunksVisualization.innerHTML = '';
+            if (overallProgressFill) overallProgressFill.style.width = '0%';
+            if (overallProgressPercentage) overallProgressPercentage.textContent = '0%';
+            if (progressStats) progressStats.textContent = '0 / 0 chunks processed';
+            if (progressTime) progressTime.textContent = 'Duration: 0.0s';
+            if (currentChunkText) currentChunkText.textContent = 'Preparing...';
+        }
+        
+        // Initialize with hidden state
+        document.addEventListener('DOMContentLoaded', () => {
+            resetProgress();
+        });
+    </script>
+</body>
+</html>
