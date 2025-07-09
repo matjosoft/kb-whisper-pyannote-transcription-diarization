@@ -79,7 +79,9 @@ The application provides an intuitive interface matching the design shown in the
    ```bash
    # Visit https://huggingface.co/pyannote/speaker-diarization-3.1
    # Accept the user agreement, then set your token:
-   export HUGGINGFACE_TOKEN="your_token_here"
+   copy .env.example .env
+   Replace HF_AUTH_TOKEN with your token
+   
    ```
 
 ## Usage
