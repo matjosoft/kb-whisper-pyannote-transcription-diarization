@@ -1,4 +1,4 @@
-# Audio Scribe AI
+# Audio Scribe AI (KB-whisper + Pyannote)
 
 A web application for audio transcription and speaker diarization using OpenAI Whisper variant KB-whisper (Swedish) and Pyannote.audio. Upload audio files or record directly in the browser to get timestamped transcriptions with speaker identification.
 KB-Whisper info: https://huggingface.co/KBLab/kb-whisper-large
