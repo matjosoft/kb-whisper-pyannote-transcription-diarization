@@ -6,6 +6,7 @@ Everything it run locally.
 
 Edit local_whisper_service.py to change model from kw-whisper-large (default)
 
+
 ## Features
 
 - 🎙️ **Browser Recording**: Record audio directly in your browser
@@ -26,6 +27,13 @@ The application provides an intuitive interface matching the design shown in the
 - Drag-and-drop file upload area
 - Speaker name editor with color-coded segments
 - Scrollable transcription display with timestamps
+
+<p float="left">
+  <img src="screenshots/screenshot-1.png" width="45%" />
+  <br>
+  <img src="screenshots/screenshot-2.png" width="45%" />
+</p>
+
 
 ## Installation
 
