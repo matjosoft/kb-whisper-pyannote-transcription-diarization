@@ -12,6 +12,7 @@ except ImportError as e:
     PYANNOTE_AVAILABLE = False
 
 from utils.config import get_settings
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +35,10 @@ class PyannoteService:
             # Try to load a pre-trained pipeline
             # Note: This might require HuggingFace authentication for some models
             try:
+                hf_auth_token = os.getenv("HF_AUTH_TOKEN")
                 self.pipeline = Pipeline.from_pretrained(
                     "pyannote/speaker-diarization-3.1",
-                    use_auth_token="REMOVED"
+                    use_auth_token=hf_auth_token
                 )
                 logger.info("Successfully loaded pyannote/speaker-diarization-3.1")
             except Exception as e:
