@@ -6,6 +6,7 @@ from pyannote.audio import Pipeline
 from pyannote.core import Annotation, Segment
 
 from utils.config import get_settings
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +23,11 @@ class PyannoteService:
         try:
             logger.info(f"Loading Pyannote pipeline '{self.settings.pyannote_model}' on device '{self.settings.device}'")
             
+            hf_auth_token = os.getenv("HF_AUTH_TOKEN")
             # Load the pre-trained pipeline
             self.pipeline = Pipeline.from_pretrained(
                 self.settings.pyannote_model,
-                use_auth_token=None  # You may need to set this for some models
+                use_auth_token=hf_auth_token  # You may need to set this for some models
             )
             
             # Move to appropriate device
