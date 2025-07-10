@@ -28,7 +28,7 @@ except ImportError as e:
     WHISPER_AVAILABLE = False
 
 try:
-    from services.pyannote_service_simple import PyannoteService
+    from services.pyannote_service import PyannoteService
     print("✅ Pyannote service loaded successfully")
     PYANNOTE_AVAILABLE = True
 except ImportError as e:
