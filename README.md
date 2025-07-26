@@ -2,9 +2,9 @@
 
 A web application for audio transcription and speaker diarization using OpenAI Whisper variant KB-whisper (Swedish) and Pyannote.audio. Upload audio files or record directly in the browser to get timestamped transcriptions with speaker identification.
 KB-Whisper info: https://huggingface.co/KBLab/kb-whisper-large
-Everything it run locally.
+Everything runs locally.
 
-Edit local_whisper_service.py to change model from kw-whisper-large (default)
+Edit local_whisper_service.py to change model from kb-whisper-large (default)
 
 
 ## Features
@@ -48,7 +48,7 @@ The application provides an intuitive interface matching the design shown in the
 1. **Clone the repository**
    ```bash
    git clone <repository-url>
-   cd transcribe2
+   cd kb-whisper-pyannote-transcription-diarization
    ```
 
 2. **Install Python dependencies**
@@ -79,8 +79,11 @@ The application provides an intuitive interface matching the design shown in the
    ```bash
    # Visit https://huggingface.co/pyannote/speaker-diarization-3.1
    # Accept the user agreement, then set your token:
-   copy .env.example .env
-   Replace HF_AUTH_TOKEN with your token
+   # Windows:
+   copy .env-example .env
+   # Linux/macOS:
+   cp .env-example .env
+   # Then edit .env and replace "YOUR HUGGING FACE TOKEN" with your actual token
    
    ```
 
@@ -88,10 +91,9 @@ The application provides an intuitive interface matching the design shown in the
 
 ### Starting the Application
 
-1. **Start the FastAPI server**
+1. **Start the application**
    ```bash
-   cd backend
-   python app.py
+   python run.py
    ```
    
    The server will start on `http://localhost:8000`
@@ -200,13 +202,18 @@ The application provides a REST API:
 ## Project Structure
 
 ```
-transcribe2/
+kb-whisper-pyannote-transcription-diarization/
 ├── backend/
 │   ├── app.py                 # FastAPI main application
 │   ├── services/
-│   │   ├── whisper_service.py # Whisper integration
+│   │   ├── audio_service.py   # Audio processing
+│   │   ├── whisper_service.py # OpenAI Whisper integration
+│   │   ├── local_whisper_service.py # Local Whisper integration
+│   │   ├── unified_whisper_service.py # Unified Whisper service
 │   │   ├── pyannote_service.py# Pyannote integration
-│   │   └── audio_service.py   # Audio processing
+│   │   ├── pyannote_service_simple.py # Simple Pyannote service
+│   │   ├── simple_diarization.py # Basic diarization
+│   │   └── mock_services.py   # Mock services for testing
 │   └── utils/
 │       └── config.py          # Configuration settings
 ├── frontend/
@@ -215,9 +222,11 @@ transcribe2/
 │       ├── css/style.css     # Styling
 │       └── js/
 │           ├── app.js        # Main application logic
+│           ├── karaoke-player.js # Karaoke-style playback
 │           └── recorder.js   # Audio recording
-├── uploads/                  # Temporary file storage
+├── screenshots/              # Application screenshots
 ├── requirements.txt          # Python dependencies
+├── LOCAL_WHISPER_SETUP.md   # Local Whisper setup guide
 └── README.md                # This file
 ```
 
@@ -253,9 +262,12 @@ transcribe2/
 ### Running in Development Mode
 
 ```bash
-# Backend with auto-reload
+# For development with auto-reload
 cd backend
 uvicorn app:app --reload --host 0.0.0.0 --port 8000
+
+# Or use the main entry point (recommended)
+python run.py
 
 # The frontend is served by FastAPI
 ```
