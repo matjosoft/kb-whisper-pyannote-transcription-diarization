@@ -59,12 +59,18 @@ def check_ffmpeg():
         return False
 
 def check_gpu():
-    """Check GPU availability"""
+    """Check GPU availability and enable TF32 for performance"""
     try:
         import torch
         if torch.cuda.is_available():
             gpu_name = torch.cuda.get_device_name(0)
             logger.info(f"CUDA GPU available: {gpu_name}")
+
+            # Enable TF32 for better performance on Ampere+ GPUs
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+            logger.info("TF32 enabled for improved GPU performance")
+
             return True
         elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
             logger.info("Apple Silicon GPU (MPS) available")

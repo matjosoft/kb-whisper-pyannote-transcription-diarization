@@ -584,7 +584,7 @@ class AudioScribeApp {
         const speakerNameElements = this.transcriptionDisplay.querySelectorAll('.speaker-name');
         speakerNameElements.forEach(element => {
             const segment = element.closest('.transcription-segment');
-            const speakerId = Object.keys(this.speakerNames).find(id => 
+            const speakerId = Object.keys(this.speakerNames).find(id =>
                 segment.classList.contains(this.getSpeakerClass(id))
             );
             if (speakerId) {

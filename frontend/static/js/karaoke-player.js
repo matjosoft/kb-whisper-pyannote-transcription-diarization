@@ -129,17 +129,19 @@ class KaraokePlayer {
 
         // Get unique speakers
         const speakers = [...new Set(this.segments.map(seg => seg.speaker))];
-        
+
         this.speakerLanes.innerHTML = '';
-        
+
         speakers.forEach((speaker, index) => {
             const laneDiv = document.createElement('div');
             laneDiv.className = `speaker-lane speaker-lane-${(index % 5) + 1}`;
-            
-            // Speaker label
+
+            // Speaker label (truncate to 8 characters)
             const labelDiv = document.createElement('div');
             labelDiv.className = 'speaker-label';
-            labelDiv.textContent = speaker;
+            const truncatedName = speaker.length > 8 ? speaker.substring(0, 8) + '...' : speaker;
+            labelDiv.textContent = truncatedName;
+            labelDiv.title = speaker; // Show full name on hover
             
             // Timeline
             const timelineDiv = document.createElement('div');
@@ -417,7 +419,7 @@ class KaraokePlayer {
             return;
         }
 
-        // Store original speaker IDs to preserve mapping
+        // Store original speaker IDs on first call to preserve mapping
         if (!this.originalSpeakerIds) {
             this.originalSpeakerIds = {};
             this.segments.forEach(segment => {
@@ -427,12 +429,14 @@ class KaraokePlayer {
             });
         }
 
-        // Update segments with new speaker names, but preserve original IDs for mapping
+        // Update segments with new speaker names using the stored original IDs
         this.segments = this.segments.map(segment => {
-            const originalId = this.originalSpeakerIds[segment.speaker] || segment.speaker;
+            // Use the stored originalSpeakerId if it exists, otherwise look it up
+            const originalId = segment.originalSpeakerId || this.originalSpeakerIds[segment.speaker] || segment.speaker;
+            const newSpeakerName = speakerNames[originalId] || segment.speaker;
             return {
                 ...segment,
-                speaker: speakerNames[originalId] || segment.speaker,
+                speaker: newSpeakerName,
                 originalSpeakerId: originalId
             };
         });
