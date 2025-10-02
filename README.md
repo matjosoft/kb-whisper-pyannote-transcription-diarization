@@ -16,7 +16,8 @@ Edit local_whisper_service.py to change model from kb-whisper-large (default)
 - 👥 **Speaker Diarization**: Automatic speaker identification using Pyannote.audio
 - ✏️ **Editable Speaker Names**: Rename speakers from "Speaker 1, 2, 3..." to actual names
 - ⏱️ **Timestamped Results**: Precise start/end times for each speaker segment
-- 📤 **Export Options**: Download results as JSON
+- 📤 **Export Options**: Download results as JSON or formatted Word documents (.docx)
+- 📝 **Custom Templates**: Use your own Word templates to control document formatting
 - 🎨 **Modern UI**: Clean, responsive interface with dark theme
 - ⚡ **GPU Acceleration**: Automatic CUDA support for faster processing
 
@@ -118,7 +119,30 @@ The application provides an intuitive interface matching the design shown in the
    - Wait for processing to complete
    - Edit speaker names in the "Edit Speaker Names" section
    - View timestamped transcription with color-coded speakers
-   - Export results as JSON using the Export button
+   - Export results as JSON or Word document using the Export buttons
+
+### Exporting Results
+
+The application supports two export formats:
+
+1. **Export to Word**
+   - Click "Export to Word" to download a formatted Word document (.docx)
+   - Includes metadata, speaker labels, timestamps, and full transcription
+   - Professional formatting with the ability to use custom templates
+   - See [WORD_EXPORT_GUIDE.md](WORD_EXPORT_GUIDE.md) for template customization
+
+2. **Export to JSON**
+   - Click "Export JSON" to download raw transcription data
+   - Includes all segments, timestamps, and speaker information
+   - Useful for further processing or integration with other tools
+
+**Setting up Word Export:**
+```bash
+# Run the setup script to initialize Word export
+python setup_word_export.py
+```
+
+For detailed information on using custom Word templates, see [WORD_EXPORT_GUIDE.md](WORD_EXPORT_GUIDE.md).
 
 ## Configuration
 

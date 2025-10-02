@@ -32,7 +32,8 @@ class AudioScribeApp {
         this.speakerEditor = document.getElementById('speakerEditor');
         this.speakerInputs = document.getElementById('speakerInputs');
         this.transcriptionDisplay = document.getElementById('transcriptionDisplay');
-        this.exportBtn = document.getElementById('exportBtn');
+        this.exportWordBtn = document.getElementById('exportWordBtn');
+        this.exportJsonBtn = document.getElementById('exportJsonBtn');
         this.clearBtn = document.getElementById('clearBtn');
     }
 
@@ -49,9 +50,10 @@ class AudioScribeApp {
         
         // Recording completion
         document.addEventListener('recordingComplete', (e) => this.handleRecordingComplete(e));
-        
+
         // Action buttons
-        this.exportBtn.addEventListener('click', () => this.exportResults());
+        this.exportWordBtn.addEventListener('click', () => this.exportToWord());
+        this.exportJsonBtn.addEventListener('click', () => this.exportToJSON());
         this.clearBtn.addEventListener('click', () => this.clearResults());
     }
 
@@ -609,12 +611,12 @@ class AudioScribeApp {
         return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}.${Math.floor((seconds % 1) * 1000).toString().padStart(3, '0')}`;
     }
 
-    exportResults() {
+    exportToJSON() {
         if (!this.currentResults) {
             alert('No results to export');
             return;
         }
-        
+
         const exportData = {
             ...this.currentResults,
             speakers: this.speakerNames,
@@ -623,16 +625,80 @@ class AudioScribeApp {
                 speaker: this.speakerNames[segment.speaker] || segment.speaker
             }))
         };
-        
+
         const dataStr = JSON.stringify(exportData, null, 2);
         const dataBlob = new Blob([dataStr], { type: 'application/json' });
-        
+
         const link = document.createElement('a');
         link.href = URL.createObjectURL(dataBlob);
         link.download = `transcription_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
         link.click();
-        
+
         URL.revokeObjectURL(link.href);
+    }
+
+    async exportToWord() {
+        if (!this.currentResults) {
+            alert('No results to export');
+            return;
+        }
+
+        try {
+            // Prepare export data with updated speaker names
+            const exportData = {
+                ...this.currentResults,
+                segments: this.currentResults.segments.map(segment => ({
+                    ...segment,
+                    speaker: this.speakerNames[segment.speaker] || segment.speaker
+                }))
+            };
+
+            // Show loading state
+            this.exportWordBtn.disabled = true;
+            this.exportWordBtn.innerHTML = '<span>⏳</span> Exporting...';
+
+            // Send request to backend
+            const response = await fetch('/api/export/word', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    transcription_data: exportData
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Export failed: ${response.statusText}`);
+            }
+
+            // Get the blob from response
+            const blob = await response.blob();
+
+            // Create download link
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `transcription_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.docx`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // Clean up
+            window.URL.revokeObjectURL(url);
+
+            // Reset button
+            this.exportWordBtn.disabled = false;
+            this.exportWordBtn.innerHTML = '<span>📝</span> Export to Word';
+
+        } catch (error) {
+            console.error('Word export failed:', error);
+            alert('Failed to export to Word: ' + error.message);
+
+            // Reset button on error
+            this.exportWordBtn.disabled = false;
+            this.exportWordBtn.innerHTML = '<span>📝</span> Export to Word';
+        }
     }
 
     clearResults() {

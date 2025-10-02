@@ -5,16 +5,18 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 import json
 import logging
+from datetime import datetime
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 import uvicorn
 
 logger = logging.getLogger(__name__)
 
 from services.audio_service import AudioService
+from services.export_service import ExportService
 from utils.config import get_settings
 
 # Try to import real AI services, fall back to mock services
@@ -54,6 +56,7 @@ settings = get_settings()
 whisper_service = WhisperService()
 pyannote_service = PyannoteService()
 audio_service = AudioService()
+export_service = ExportService()
 
 # Create uploads directory
 UPLOAD_DIR = Path("uploads")
@@ -397,7 +400,7 @@ async def download_local_model(request: Request):
     try:
         data = await request.json()
         model_name = data.get("model_name")
-        
+
         if hasattr(whisper_service, 'download_local_model'):
             success = whisper_service.download_local_model(model_name)
             if success:
@@ -411,6 +414,68 @@ async def download_local_model(request: Request):
             raise HTTPException(status_code=400, detail="Model downloading not supported")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to download model: {str(e)}")
+
+@app.post("/api/export/word")
+async def export_to_word(request: Request):
+    """Export transcription results to Word document"""
+    try:
+        data = await request.json()
+        transcription_data = data.get("transcription_data")
+        template_name = data.get("template_name")  # Optional
+
+        if not transcription_data:
+            raise HTTPException(status_code=400, detail="No transcription data provided")
+
+        # Get template path if specified
+        template_path = None
+        if template_name:
+            template_path = export_service.templates_dir / template_name
+            if not template_path.exists():
+                logger.warning(f"Template not found: {template_name}, using default format")
+                template_path = None
+
+        # Create temporary output path
+        output_dir = Path("exports")
+        output_dir.mkdir(exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_filename = f"transcription_{timestamp}.docx"
+        output_path = output_dir / output_filename
+
+        # Generate Word document
+        result_path = export_service.export_to_word(
+            transcription_data=transcription_data,
+            template_path=template_path,
+            output_path=output_path
+        )
+
+        # Return the file as a download
+        return FileResponse(
+            path=str(result_path),
+            filename=output_filename,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={
+                "Content-Disposition": f"attachment; filename={output_filename}"
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Word export failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
+
+@app.get("/api/export/templates")
+async def get_available_templates():
+    """Get list of available Word templates"""
+    try:
+        templates = export_service.get_available_templates()
+        template_names = [t.name for t in templates]
+
+        return JSONResponse({
+            "success": True,
+            "templates": template_names
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get templates: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(
