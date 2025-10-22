@@ -87,7 +87,7 @@ class AudioScribeApp {
 
     async toggleRecording() {
         if (!this.recorder) {
-            alert('Recording is not available');
+            window.toast.error('Recording Not Available', 'Your browser does not support audio recording');
             return;
         }
 
@@ -99,7 +99,7 @@ class AudioScribeApp {
             }
         } catch (error) {
             console.error('Recording error:', error);
-            alert('Recording failed: ' + error.message);
+            window.toast.error('Recording Failed', error.message);
         }
     }
 
@@ -157,17 +157,17 @@ class AudioScribeApp {
     handleFile(file) {
         // Validate file type
         if (!file.type.startsWith('audio/')) {
-            alert('Please select an audio file');
+            window.toast.warning('Invalid File Type', 'Please select an audio file');
             return;
         }
-        
+
         // Validate file size (100MB limit)
         const maxSize = 800 * 1024 * 1024;
         if (file.size > maxSize) {
-            alert('File size must be less than 800MB');
+            window.toast.warning('File Too Large', 'File size must be less than 800MB');
             return;
         }
-        
+
         // Store the audio file for karaoke player
         this.currentAudioFile = file;
         this.processAudio(file, 'upload');
@@ -175,33 +175,34 @@ class AudioScribeApp {
 
     async processAudio(audioData, source) {
         if (this.isProcessing) {
-            alert('Already processing audio. Please wait...');
+            window.toast.info('Processing in Progress', 'Please wait for the current audio to finish processing');
             return;
         }
 
         this.isProcessing = true;
         this.showProcessing('Uploading audio...');
-        
+
         try {
             let fileId;
-            
+
             if (source === 'recording') {
                 fileId = await this.saveRecording(audioData);
             } else {
                 fileId = await this.uploadFile(audioData);
             }
-            
+
             this.showProcessing('Transcribing and analyzing speakers...');
             const results = await this.transcribeAudio(fileId);
-            
+
             // Only hide processing after successful completion
             this.hideProcessing();
             this.displayResults(results);
-            
+            window.toast.success('Processing Complete', 'Your audio has been transcribed and analyzed successfully');
+
         } catch (error) {
             console.error('Processing error:', error);
             this.hideProcessing(); // Hide processing on error
-            alert('Processing failed: ' + error.message);
+            window.toast.error('Processing Failed', error.message);
         } finally {
             this.isProcessing = false;
         }
@@ -613,7 +614,7 @@ class AudioScribeApp {
 
     exportToJSON() {
         if (!this.currentResults) {
-            alert('No results to export');
+            window.toast.warning('No Results', 'Please transcribe audio before exporting');
             return;
         }
 
@@ -635,11 +636,12 @@ class AudioScribeApp {
         link.click();
 
         URL.revokeObjectURL(link.href);
+        window.toast.success('Export Complete', 'JSON file has been downloaded successfully');
     }
 
     async exportToWord() {
         if (!this.currentResults) {
-            alert('No results to export');
+            window.toast.warning('No Results', 'Please transcribe audio before exporting');
             return;
         }
 
@@ -691,9 +693,11 @@ class AudioScribeApp {
             this.exportWordBtn.disabled = false;
             this.exportWordBtn.innerHTML = '<span>📝</span> Export to Word';
 
+            window.toast.success('Export Complete', 'Word document has been downloaded successfully');
+
         } catch (error) {
             console.error('Word export failed:', error);
-            alert('Failed to export to Word: ' + error.message);
+            window.toast.error('Export Failed', error.message);
 
             // Reset button on error
             this.exportWordBtn.disabled = false;
