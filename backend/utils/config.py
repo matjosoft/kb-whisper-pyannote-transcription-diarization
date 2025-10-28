@@ -1,6 +1,18 @@
 import os
 from pathlib import Path
 from typing import Optional
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+# Search for .env in the project root (parent of backend directory)
+env_path = Path(__file__).parent.parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path)
+    print(f"✅ Loaded environment variables from {env_path}")
+else:
+    # Try loading from current directory
+    load_dotenv()
+    print("⚠️ No .env file found in project root, using system environment variables")
 
 try:
     import torch
@@ -29,6 +41,10 @@ class Settings:
         self.vllm_api_key = os.getenv("VLLM_API_KEY", "token-abc123")
         self.vllm_model_name = os.getenv("VLLM_MODEL_NAME", "openai/whisper-large-v3-turbo")
         self.vllm_max_audio_filesize_mb = int(os.getenv("VLLM_MAX_AUDIO_FILESIZE_MB", "25"))
+
+        # Debug print vLLM settings if enabled
+        if self.whisper_use_vllm:
+            print(f"🔧 vLLM enabled: {self.vllm_base_url} | Model: {self.vllm_model_name}")
         
         # Pyannote settings
         self.pyannote_model = os.getenv("PYANNOTE_MODEL", "pyannote/speaker-diarization-3.1")
