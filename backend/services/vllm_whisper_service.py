@@ -60,45 +60,80 @@ class VllmWhisperService:
                 )
 
             # Open and send audio file to vLLM server
+            # Note: vLLM currently only supports 'text' or 'json' response formats, not 'verbose_json'
             with open(audio_path, "rb") as audio_file:
                 transcription = self.client.audio.transcriptions.create(
                     model=self.settings.vllm_model_name,
                     file=audio_file,
                     language=self.settings.whisper_language if self.settings.whisper_language != "auto" else None,
-                    response_format="verbose_json",
+                    response_format="json",
+                    timestamp_granularities=["segment"],
                 )
 
             # Convert response to expected format
             segments = []
+
+            # Check if the response has segments (verbose mode)
             if hasattr(transcription, 'segments') and transcription.segments:
                 for segment in transcription.segments:
+                    # Handle both dict and object access
+                    if isinstance(segment, dict):
+                        start = segment.get("start", 0)
+                        end = segment.get("end", 0)
+                        text = segment.get("text", "").strip()
+                        words = segment.get("words", [])
+                    else:
+                        start = getattr(segment, "start", 0)
+                        end = getattr(segment, "end", 0)
+                        text = getattr(segment, "text", "").strip()
+                        words = getattr(segment, "words", [])
+
                     segment_data = {
-                        "start": segment.get("start", 0),
-                        "end": segment.get("end", 0),
-                        "text": segment.get("text", "").strip(),
+                        "start": start,
+                        "end": end,
+                        "text": text,
                         "words": []
                     }
+
                     # Check if word-level timestamps are available
-                    if hasattr(segment, 'words') and segment.words:
+                    if words:
                         segment_data["words"] = [
                             {
-                                "start": word.get("start", 0),
-                                "end": word.get("end", 0),
-                                "word": word.get("word", "")
+                                "start": w.get("start", 0) if isinstance(w, dict) else getattr(w, "start", 0),
+                                "end": w.get("end", 0) if isinstance(w, dict) else getattr(w, "end", 0),
+                                "word": w.get("word", "") if isinstance(w, dict) else getattr(w, "word", "")
                             }
-                            for word in segment.words
+                            for w in words
                         ]
                     segments.append(segment_data)
 
-            # Calculate duration from segments or use provided duration
+            # If no segments, create a single segment from the text
+            if not segments and hasattr(transcription, 'text') and transcription.text:
+                # Estimate duration from audio file if possible
+                import torchaudio
+                try:
+                    waveform, sample_rate = torchaudio.load(str(audio_path))
+                    duration = waveform.shape[1] / sample_rate
+                except:
+                    duration = 0
+
+                segments.append({
+                    "start": 0.0,
+                    "end": duration,
+                    "text": transcription.text.strip(),
+                    "words": []
+                })
+
+            # Calculate duration from segments or audio file
             duration = 0
             if segments:
                 duration = max([seg["end"] for seg in segments])
-            elif hasattr(transcription, 'duration'):
+
+            if hasattr(transcription, 'duration'):
                 duration = transcription.duration
 
             transcription_result = {
-                "text": transcription.text,
+                "text": transcription.text if hasattr(transcription, 'text') else "",
                 "language": transcription.language if hasattr(transcription, 'language') else "unknown",
                 "segments": segments,
                 "duration": duration,
