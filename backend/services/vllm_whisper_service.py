@@ -183,8 +183,8 @@ class VllmWhisperService:
 
             # Yield completion progress
             yield {
-                "status": "completed",
-                "message": "Transcription completed",
+                "status": "transcription_complete",
+                "message": "Transcription completed successfully",
                 "result": result
             }
 
