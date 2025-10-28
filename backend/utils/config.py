@@ -20,8 +20,15 @@ class Settings:
         self.whisper_model = os.getenv("WHISPER_MODEL", "base")  # tiny, base, small, medium, large
         self.whisper_language = os.getenv("WHISPER_LANGUAGE", "sv")  # auto-detect or specific language
         self.whisper_use_local = os.getenv("WHISPER_USE_LOCAL", "true").lower() == "true"
+        self.whisper_use_vllm = os.getenv("WHISPER_USE_VLLM", "false").lower() == "true"
         self.whisper_local_model_path = os.getenv("WHISPER_LOCAL_MODEL_PATH", f"D:\Develop\AI\kb-whisper\model\model.safetensors")
         self.whisper_local_model_name = os.getenv("WHISPER_LOCAL_MODEL_NAME", "KBLab/kb-whisper-large")
+
+        # vLLM settings
+        self.vllm_base_url = os.getenv("VLLM_BASE_URL", "http://localhost:8000/v1")
+        self.vllm_api_key = os.getenv("VLLM_API_KEY", "token-abc123")
+        self.vllm_model_name = os.getenv("VLLM_MODEL_NAME", "openai/whisper-large-v3-turbo")
+        self.vllm_max_audio_filesize_mb = int(os.getenv("VLLM_MAX_AUDIO_FILESIZE_MB", "25"))
         
         # Pyannote settings
         self.pyannote_model = os.getenv("PYANNOTE_MODEL", "pyannote/speaker-diarization-3.1")

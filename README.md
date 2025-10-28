@@ -11,8 +11,9 @@ Edit local_whisper_service.py to change model from kb-whisper-large (default)
 
 - 🎙️ **Browser Recording**: Record audio directly in your browser
 - 📁 **File Upload**: Support for multiple audio formats (MP3, WAV, M4A, FLAC, OGG, WebM)
-- 🤖 **AI Transcription**: Powered by OpenAI Whisper and local Whisper models for accurate speech-to-text
+- 🤖 **AI Transcription**: Powered by OpenAI Whisper, local Whisper models, or vLLM servers for accurate speech-to-text
 - 🏠 **Local Processing**: Option to use local Whisper models for privacy and offline processing
+- ⚡ **vLLM Support**: High-performance transcription via vLLM server with optimized inference
 - 👥 **Speaker Diarization**: Automatic speaker identification using Pyannote.audio
 - ✏️ **Editable Speaker Names**: Rename speakers from "Speaker 1, 2, 3..." to actual names
 - ⏱️ **Timestamped Results**: Precise start/end times for each speaker segment
@@ -193,6 +194,43 @@ export WHISPER_LOCAL_MODEL_PATH="/path/to/local/model"
 
 For detailed setup instructions, see [LOCAL_WHISPER_SETUP.md](LOCAL_WHISPER_SETUP.md).
 
+### vLLM Server Configuration
+
+For high-performance transcription, you can use a vLLM server with Whisper models:
+
+```bash
+# Enable vLLM (takes priority over local and OpenAI Whisper)
+export WHISPER_USE_VLLM=true
+
+# vLLM server configuration
+export VLLM_BASE_URL="http://localhost:8000/v1"
+export VLLM_API_KEY="token-abc123"
+export VLLM_MODEL_NAME="openai/whisper-large-v3-turbo"
+export VLLM_MAX_AUDIO_FILESIZE_MB="25"
+```
+
+**Setting up vLLM Server:**
+
+1. Install vLLM with audio support:
+   ```bash
+   pip install vllm[audio]
+   ```
+
+2. Start vLLM server with a Whisper model:
+   ```bash
+   vllm serve openai/whisper-large-v3-turbo --api-key token-abc123
+   ```
+
+3. Configure your application to use vLLM by setting the environment variables above in your `.env` file.
+
+**Benefits of vLLM:**
+- Optimized inference performance with PagedAttention
+- Compatible with OpenAI API format
+- Supports multiple concurrent requests efficiently
+- Can run on remote servers for distributed processing
+
+**Note:** vLLM requires a CUDA-capable GPU for optimal performance.
+
 ### Model Selection
 
 **Whisper Models:**
@@ -233,6 +271,7 @@ kb-whisper-pyannote-transcription-diarization/
 │   │   ├── audio_service.py   # Audio processing
 │   │   ├── whisper_service.py # OpenAI Whisper integration
 │   │   ├── local_whisper_service.py # Local Whisper integration
+│   │   ├── vllm_whisper_service.py # vLLM server integration
 │   │   ├── unified_whisper_service.py # Unified Whisper service
 │   │   ├── pyannote_service.py# Pyannote integration
 │   │   ├── pyannote_service_simple.py # Simple Pyannote service
