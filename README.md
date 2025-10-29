@@ -205,7 +205,7 @@ export WHISPER_USE_VLLM=true
 # vLLM server configuration
 export VLLM_BASE_URL="http://localhost:8000/v1"
 export VLLM_API_KEY="token-abc123"
-export VLLM_MODEL_NAME="openai/whisper-large-v3-turbo"
+export VLLM_MODEL_NAME="KBLab/kb-whisper-large"
 export VLLM_MAX_AUDIO_FILESIZE_MB="25"  # Files larger than this are split into 30s chunks
 ```
 
@@ -218,7 +218,7 @@ export VLLM_MAX_AUDIO_FILESIZE_MB="25"  # Files larger than this are split into 
 
 2. Start vLLM server with a Whisper model:
    ```bash
-   vllm serve openai/whisper-large-v3-turbo --api-key token-abc123
+   vllm serve KBLab/kb-whisper-large --api-key token-abc123
    ```
 
 3. Configure your application to use vLLM by setting the environment variables above in your `.env` file.

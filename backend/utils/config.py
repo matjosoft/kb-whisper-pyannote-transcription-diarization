@@ -39,7 +39,7 @@ class Settings:
         # vLLM settings
         self.vllm_base_url = os.getenv("VLLM_BASE_URL", "http://localhost:8000/v1")
         self.vllm_api_key = os.getenv("VLLM_API_KEY", "token-abc123")
-        self.vllm_model_name = os.getenv("VLLM_MODEL_NAME", "openai/whisper-large-v3-turbo")
+        self.vllm_model_name = os.getenv("VLLM_MODEL_NAME", "KBLab/kb-whisper-large")
         self.vllm_max_audio_filesize_mb = int(os.getenv("VLLM_MAX_AUDIO_FILESIZE_MB", "25"))
 
         # Debug print vLLM settings if enabled
