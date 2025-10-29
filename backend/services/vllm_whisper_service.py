@@ -35,6 +35,7 @@ class VllmWhisperService:
     def transcribe(self, audio_path: Path) -> Dict[str, Any]:
         """
         Transcribe audio file using vLLM server
+        Automatically chunks large files if needed
 
         Args:
             audio_path: Path to the audio file
@@ -53,12 +54,37 @@ class VllmWhisperService:
 
             # Check file size
             file_size_mb = audio_path.stat().st_size / (1024 * 1024)
-            if file_size_mb > self.settings.vllm_max_audio_filesize_mb:
-                raise ValueError(
-                    f"Audio file size ({file_size_mb:.1f}MB) exceeds maximum allowed "
-                    f"({self.settings.vllm_max_audio_filesize_mb}MB)"
-                )
+            logger.info(f"Audio file size: {file_size_mb:.1f}MB")
 
+            # If file is larger than chunk size, split and process in chunks
+            if file_size_mb > self.settings.vllm_chunk_size_mb:
+                logger.info(f"File exceeds chunk size ({self.settings.vllm_chunk_size_mb}MB), processing in chunks...")
+                return self._transcribe_chunked(audio_path)
+
+            # Check if file exceeds max size (should not happen if chunking works correctly)
+            if file_size_mb > self.settings.vllm_max_audio_filesize_mb:
+                logger.warning(f"File size ({file_size_mb:.1f}MB) exceeds max ({self.settings.vllm_max_audio_filesize_mb}MB), attempting to chunk...")
+                return self._transcribe_chunked(audio_path)
+
+            # Process single file
+            return self._transcribe_single_file(audio_path)
+
+        except Exception as e:
+            logger.error(f"vLLM transcription failed: {e}")
+            raise RuntimeError(f"vLLM transcription failed: {str(e)}")
+
+    def _transcribe_single_file(self, audio_path: Path, time_offset: float = 0.0) -> Dict[str, Any]:
+        """
+        Transcribe a single audio file using vLLM server
+
+        Args:
+            audio_path: Path to the audio file
+            time_offset: Time offset to add to all timestamps (for chunked processing)
+
+        Returns:
+            Dictionary containing transcription results with segments and timestamps
+        """
+        try:
             # Open and send audio file to vLLM server
             # Note: vLLM currently only supports 'text' or 'json' response formats, not 'verbose_json'
             with open(audio_path, "rb") as audio_file:
@@ -95,8 +121,8 @@ class VllmWhisperService:
                         words = getattr(segment, "words", [])
 
                     segment_data = {
-                        "start": start,
-                        "end": end,
+                        "start": start + time_offset,
+                        "end": end + time_offset,
                         "text": text,
                         "words": []
                     }
@@ -105,8 +131,8 @@ class VllmWhisperService:
                     if words:
                         segment_data["words"] = [
                             {
-                                "start": w.get("start", 0) if isinstance(w, dict) else getattr(w, "start", 0),
-                                "end": w.get("end", 0) if isinstance(w, dict) else getattr(w, "end", 0),
+                                "start": (w.get("start", 0) if isinstance(w, dict) else getattr(w, "start", 0)) + time_offset,
+                                "end": (w.get("end", 0) if isinstance(w, dict) else getattr(w, "end", 0)) + time_offset,
                                 "word": w.get("word", "") if isinstance(w, dict) else getattr(w, "word", "")
                             }
                             for w in words
@@ -121,11 +147,11 @@ class VllmWhisperService:
                 # Try to get word-level timestamps
                 if hasattr(transcription, 'words') and transcription.words:
                     logger.info(f"Found {len(transcription.words)} words with timestamps")
-                    segments = self._split_words_into_segments(transcription.words, transcription.text if hasattr(transcription, 'text') else "")
+                    segments = self._split_words_into_segments(transcription.words, transcription.text if hasattr(transcription, 'text') else "", time_offset)
                 # Otherwise create segments from the text
                 elif hasattr(transcription, 'text') and transcription.text:
                     logger.info("No word timestamps, splitting text by sentences...")
-                    segments = self._split_text_into_segments(transcription.text, audio_path)
+                    segments = self._split_text_into_segments(transcription.text, audio_path, time_offset)
 
             # If we still don't have segments, create one from the text
             if not segments and hasattr(transcription, 'text') and transcription.text:
@@ -137,8 +163,8 @@ class VllmWhisperService:
                     duration = 0
 
                 segments.append({
-                    "start": 0.0,
-                    "end": duration,
+                    "start": 0.0 + time_offset,
+                    "end": duration + time_offset,
                     "text": transcription.text.strip(),
                     "words": []
                 })
@@ -163,8 +189,109 @@ class VllmWhisperService:
             return transcription_result
 
         except Exception as e:
-            logger.error(f"vLLM transcription failed: {e}")
+            logger.error(f"vLLM single file transcription failed: {e}")
             raise RuntimeError(f"vLLM transcription failed: {str(e)}")
+
+    def _transcribe_chunked(self, audio_path: Path) -> Dict[str, Any]:
+        """
+        Transcribe a large audio file by splitting it into chunks
+
+        Args:
+            audio_path: Path to the audio file
+
+        Returns:
+            Dictionary containing merged transcription results
+        """
+        import torchaudio
+        import tempfile
+
+        logger.info(f"Starting chunked transcription for large file: {audio_path}")
+
+        try:
+            # Load audio to get duration
+            waveform, sample_rate = torchaudio.load(str(audio_path))
+            total_duration = waveform.shape[1] / sample_rate
+            logger.info(f"Audio duration: {total_duration:.1f}s, Sample rate: {sample_rate}Hz")
+
+            # Calculate chunk duration based on file size and target chunk size
+            file_size_mb = audio_path.stat().st_size / (1024 * 1024)
+            target_chunk_size_mb = self.settings.vllm_chunk_size_mb
+
+            # Estimate duration per chunk (rough approximation)
+            chunk_duration = (target_chunk_size_mb / file_size_mb) * total_duration
+            # Round to nearest 30 seconds for cleaner chunks
+            chunk_duration = max(30, round(chunk_duration / 30) * 30)
+
+            logger.info(f"Using chunk duration: {chunk_duration}s per chunk")
+
+            # Split audio into chunks
+            chunks = []
+            current_time = 0.0
+
+            while current_time < total_duration:
+                chunk_end = min(current_time + chunk_duration, total_duration)
+                chunks.append((current_time, chunk_end))
+                current_time = chunk_end
+
+            logger.info(f"Split audio into {len(chunks)} chunks")
+
+            # Process each chunk
+            all_segments = []
+            full_text = ""
+
+            with tempfile.TemporaryDirectory() as temp_dir:
+                for chunk_idx, (start_time, end_time) in enumerate(chunks):
+                    logger.info(f"Processing chunk {chunk_idx + 1}/{len(chunks)}: {start_time:.1f}s - {end_time:.1f}s")
+
+                    # Extract chunk
+                    start_sample = int(start_time * sample_rate)
+                    end_sample = int(end_time * sample_rate)
+                    chunk_waveform = waveform[:, start_sample:end_sample]
+
+                    # Save chunk to temporary file
+                    chunk_path = Path(temp_dir) / f"chunk_{chunk_idx}.wav"
+                    torchaudio.save(str(chunk_path), chunk_waveform, sample_rate)
+
+                    # Check chunk file size
+                    chunk_size_mb = chunk_path.stat().st_size / (1024 * 1024)
+                    logger.info(f"Chunk {chunk_idx + 1} size: {chunk_size_mb:.1f}MB")
+
+                    # Transcribe chunk with time offset
+                    try:
+                        chunk_result = self._transcribe_single_file(chunk_path, time_offset=start_time)
+
+                        # Merge results
+                        if chunk_result.get("segments"):
+                            all_segments.extend(chunk_result["segments"])
+                        if chunk_result.get("text"):
+                            full_text += " " + chunk_result["text"]
+
+                        logger.info(f"Chunk {chunk_idx + 1} transcription completed: {len(chunk_result.get('segments', []))} segments")
+
+                    except Exception as e:
+                        logger.error(f"Failed to transcribe chunk {chunk_idx + 1}: {e}")
+                        # Continue with other chunks even if one fails
+                        continue
+
+            # Calculate final duration
+            duration = total_duration
+            if all_segments:
+                duration = max([seg["end"] for seg in all_segments])
+
+            transcription_result = {
+                "text": full_text.strip(),
+                "language": "unknown",  # Will be detected from first chunk
+                "segments": all_segments,
+                "duration": duration,
+                "model_type": "vllm_chunked"
+            }
+
+            logger.info(f"Chunked transcription completed. Total segments: {len(all_segments)}")
+            return transcription_result
+
+        except Exception as e:
+            logger.error(f"Chunked transcription failed: {e}")
+            raise RuntimeError(f"Chunked transcription failed: {str(e)}")
 
     async def transcribe_with_progress(self, audio_path: Path, progress_callback=None):
         """
@@ -263,7 +390,7 @@ class VllmWhisperService:
             "max_filesize_mb": self.settings.vllm_max_audio_filesize_mb
         }
 
-    def _split_words_into_segments(self, words, full_text: str) -> list:
+    def _split_words_into_segments(self, words, full_text: str, time_offset: float = 0.0) -> list:
         """Split word-level timestamps into segments for better diarization"""
         segments = []
         if not words:
@@ -287,13 +414,13 @@ class VllmWhisperService:
             if segment_start is None:
                 segment_start = w_start
 
-            current_segment.append({"start": w_start, "end": w_end, "word": w_text})
+            current_segment.append({"start": w_start + time_offset, "end": w_end + time_offset, "word": w_text})
 
             # Create a new segment every ~10 words or every 30 seconds
             if len(current_segment) >= 10 or (w_end - segment_start) >= 30:
                 segment_text = " ".join([w["word"] for w in current_segment])
                 segments.append({
-                    "start": segment_start,
+                    "start": segment_start + time_offset,
                     "end": current_segment[-1]["end"],
                     "text": segment_text.strip(),
                     "words": current_segment
@@ -314,7 +441,7 @@ class VllmWhisperService:
         logger.info(f"Split {len(words)} words into {len(segments)} segments")
         return segments
 
-    def _split_text_into_segments(self, text: str, audio_path: Path) -> list:
+    def _split_text_into_segments(self, text: str, audio_path: Path, time_offset: float = 0.0) -> list:
         """Split text into segments based on sentences for better diarization"""
         import re
         import torchaudio
@@ -348,8 +475,8 @@ class VllmWhisperService:
             sentence_duration = (len(sentence) / total_chars) * total_duration
 
             segments.append({
-                "start": current_time,
-                "end": current_time + sentence_duration,
+                "start": current_time + time_offset,
+                "end": current_time + sentence_duration + time_offset,
                 "text": sentence,
                 "words": []
             })
