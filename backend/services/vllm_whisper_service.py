@@ -35,7 +35,7 @@ class VllmWhisperService:
     def transcribe(self, audio_path: Path) -> Dict[str, Any]:
         """
         Transcribe audio file using vLLM server
-        Automatically chunks large files if needed
+        Automatically chunks large files into 30-second segments if needed
 
         Args:
             audio_path: Path to the audio file
@@ -56,14 +56,9 @@ class VllmWhisperService:
             file_size_mb = audio_path.stat().st_size / (1024 * 1024)
             logger.info(f"Audio file size: {file_size_mb:.1f}MB")
 
-            # If file is larger than chunk size, split and process in chunks
-            if file_size_mb > self.settings.vllm_chunk_size_mb:
-                logger.info(f"File exceeds chunk size ({self.settings.vllm_chunk_size_mb}MB), processing in chunks...")
-                return self._transcribe_chunked(audio_path)
-
-            # Check if file exceeds max size (should not happen if chunking works correctly)
+            # If file is larger than max size, split into 30-second chunks
             if file_size_mb > self.settings.vllm_max_audio_filesize_mb:
-                logger.warning(f"File size ({file_size_mb:.1f}MB) exceeds max ({self.settings.vllm_max_audio_filesize_mb}MB), attempting to chunk...")
+                logger.info(f"File exceeds max size ({self.settings.vllm_max_audio_filesize_mb}MB), processing in 30-second chunks...")
                 return self._transcribe_chunked(audio_path)
 
             # Process single file
@@ -194,7 +189,8 @@ class VllmWhisperService:
 
     def _transcribe_chunked(self, audio_path: Path) -> Dict[str, Any]:
         """
-        Transcribe a large audio file by splitting it into chunks
+        Transcribe a large audio file by splitting it into 30-second chunks
+        (matches the chunk size used in local_whisper_service for consistency)
 
         Args:
             audio_path: Path to the audio file
@@ -213,18 +209,13 @@ class VllmWhisperService:
             total_duration = waveform.shape[1] / sample_rate
             logger.info(f"Audio duration: {total_duration:.1f}s, Sample rate: {sample_rate}Hz")
 
-            # Calculate chunk duration based on file size and target chunk size
-            file_size_mb = audio_path.stat().st_size / (1024 * 1024)
-            target_chunk_size_mb = self.settings.vllm_chunk_size_mb
+            # Use fixed 30-second chunks (same as local_whisper_service)
+            chunk_duration = 30  # seconds
+            total_chunks = max(1, int(total_duration / chunk_duration) + (1 if total_duration % chunk_duration > 0 else 0))
 
-            # Estimate duration per chunk (rough approximation)
-            chunk_duration = (target_chunk_size_mb / file_size_mb) * total_duration
-            # Round to nearest 30 seconds for cleaner chunks
-            chunk_duration = max(30, round(chunk_duration / 30) * 30)
+            logger.info(f"Splitting into {total_chunks} chunks of {chunk_duration}s each")
 
-            logger.info(f"Using chunk duration: {chunk_duration}s per chunk")
-
-            # Split audio into chunks
+            # Split audio into 30-second chunks
             chunks = []
             current_time = 0.0
 
@@ -233,7 +224,7 @@ class VllmWhisperService:
                 chunks.append((current_time, chunk_end))
                 current_time = chunk_end
 
-            logger.info(f"Split audio into {len(chunks)} chunks")
+            logger.info(f"Created {len(chunks)} chunks for processing")
 
             # Process each chunk
             all_segments = []
@@ -293,12 +284,129 @@ class VllmWhisperService:
             logger.error(f"Chunked transcription failed: {e}")
             raise RuntimeError(f"Chunked transcription failed: {str(e)}")
 
+    async def _transcribe_chunked_with_progress(self, audio_path: Path):
+        """
+        Transcribe a large audio file by splitting it into 30-second chunks
+        Yields progress updates for each chunk
+
+        Args:
+            audio_path: Path to the audio file
+
+        Yields:
+            Progress updates as dictionaries
+        """
+        import torchaudio
+        import tempfile
+        import asyncio
+        import concurrent.futures
+
+        logger.info(f"Starting chunked transcription with progress for large file: {audio_path}")
+
+        try:
+            # Load audio to get duration
+            waveform, sample_rate = torchaudio.load(str(audio_path))
+            total_duration = waveform.shape[1] / sample_rate
+            logger.info(f"Audio duration: {total_duration:.1f}s, Sample rate: {sample_rate}Hz")
+
+            # Use fixed 30-second chunks
+            chunk_duration = 30
+            total_chunks = max(1, int(total_duration / chunk_duration) + (1 if total_duration % chunk_duration > 0 else 0))
+
+            # Yield initial progress
+            yield {
+                "status": "transcribing",
+                "message": f"Starting transcription of {total_duration:.1f}s audio in {total_chunks} chunks...",
+                "total_chunks": total_chunks,
+                "duration": total_duration
+            }
+
+            # Split audio into 30-second chunks
+            chunks = []
+            current_time = 0.0
+            while current_time < total_duration:
+                chunk_end = min(current_time + chunk_duration, total_duration)
+                chunks.append((current_time, chunk_end))
+                current_time = chunk_end
+
+            # Process each chunk
+            all_segments = []
+            full_text = ""
+
+            with tempfile.TemporaryDirectory() as temp_dir:
+                for chunk_idx, (start_time, end_time) in enumerate(chunks):
+                    # Yield chunk processing status
+                    yield {
+                        "status": "processing_chunk",
+                        "chunk_index": chunk_idx,
+                        "chunk_start": start_time,
+                        "chunk_end": end_time,
+                        "total_chunks": total_chunks,
+                        "message": f"Processing chunk {chunk_idx + 1}/{total_chunks} ({start_time:.1f}s - {end_time:.1f}s)"
+                    }
+
+                    # Extract chunk
+                    start_sample = int(start_time * sample_rate)
+                    end_sample = int(end_time * sample_rate)
+                    chunk_waveform = waveform[:, start_sample:end_sample]
+
+                    # Save chunk to temporary file
+                    chunk_path = Path(temp_dir) / f"chunk_{chunk_idx}.wav"
+                    torchaudio.save(str(chunk_path), chunk_waveform, sample_rate)
+
+                    chunk_size_mb = chunk_path.stat().st_size / (1024 * 1024)
+                    logger.info(f"Chunk {chunk_idx + 1} size: {chunk_size_mb:.1f}MB")
+
+                    # Transcribe chunk in thread pool to avoid blocking
+                    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                    future = executor.submit(self._transcribe_single_file, chunk_path, start_time)
+
+                    # Wait for chunk to complete
+                    chunk_result = await asyncio.get_event_loop().run_in_executor(None, future.result)
+
+                    # Merge results
+                    if chunk_result.get("segments"):
+                        all_segments.extend(chunk_result["segments"])
+                    if chunk_result.get("text"):
+                        full_text += " " + chunk_result["text"]
+
+                    logger.info(f"Chunk {chunk_idx + 1} completed: {len(chunk_result.get('segments', []))} segments")
+
+            # Calculate final duration
+            duration = total_duration
+            if all_segments:
+                duration = max([seg["end"] for seg in all_segments])
+
+            transcription_result = {
+                "text": full_text.strip(),
+                "language": "unknown",
+                "segments": all_segments,
+                "duration": duration,
+                "model_type": "vllm_chunked"
+            }
+
+            # Yield completion
+            yield {
+                "status": "transcription_complete",
+                "message": "Transcription completed successfully",
+                "result": transcription_result
+            }
+
+            logger.info(f"Chunked transcription completed. Total segments: {len(all_segments)}")
+
+        except Exception as e:
+            logger.error(f"Chunked transcription with progress failed: {e}")
+            yield {
+                "status": "error",
+                "message": f"Transcription failed: {str(e)}"
+            }
+            raise
+
     async def transcribe_with_progress(self, audio_path: Path, progress_callback=None):
         """
         Transcribe audio file with progress updates
 
-        Note: vLLM server doesn't support streaming progress, so this simulates
-        progress updates during the blocking transcription call.
+        For large files, yields real progress from actual chunk processing.
+        For small files, simulates progress updates.
 
         Args:
             audio_path: Path to the audio file
@@ -319,59 +427,72 @@ class VllmWhisperService:
 
             logger.info(f"Transcribing audio file with vLLM (streaming mode): {audio_path}")
 
-            # Get audio duration for progress simulation
-            try:
-                waveform, sample_rate = torchaudio.load(str(audio_path))
-                duration = waveform.shape[1] / sample_rate
-            except:
-                duration = 60  # Default estimate
+            # Check if file needs chunking
+            file_size_mb = audio_path.stat().st_size / (1024 * 1024)
+            needs_chunking = file_size_mb > self.settings.vllm_max_audio_filesize_mb
 
-            # Calculate simulated chunks
-            total_chunks = max(1, int(duration / 30))
+            if needs_chunking:
+                # Use real chunked transcription with actual progress
+                logger.info("Using chunked transcription with real progress updates")
+                async for progress_data in self._transcribe_chunked_with_progress(audio_path):
+                    yield progress_data
+            else:
+                # For small files, simulate progress
+                logger.info("Using single-file transcription with simulated progress")
 
-            # Yield initial progress
-            yield {
-                "status": "transcribing",
-                "message": f"Starting transcription of {duration:.1f}s audio in {total_chunks} chunks...",
-                "total_chunks": total_chunks,
-                "duration": duration
-            }
+                # Get audio duration
+                try:
+                    waveform, sample_rate = torchaudio.load(str(audio_path))
+                    duration = waveform.shape[1] / sample_rate
+                except:
+                    duration = 60  # Default estimate
 
-            # Start transcription in background
-            import concurrent.futures
-            executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-            future = executor.submit(self.transcribe, audio_path)
+                # Calculate simulated chunks
+                total_chunks = max(1, int(duration / 30))
 
-            # Simulate progress while waiting
-            for chunk_idx in range(total_chunks):
-                chunk_start = chunk_idx * 30
-                chunk_end = min((chunk_idx + 1) * 30, duration)
-
+                # Yield initial progress
                 yield {
-                    "status": "processing_chunk",
-                    "chunk_index": chunk_idx,
-                    "chunk_start": chunk_start,
-                    "chunk_end": chunk_end,
+                    "status": "transcribing",
+                    "message": f"Starting transcription of {duration:.1f}s audio in {total_chunks} chunks...",
                     "total_chunks": total_chunks,
-                    "message": f"Processing chunk {chunk_idx + 1}/{total_chunks} ({chunk_start:.1f}s - {chunk_end:.1f}s)"
+                    "duration": duration
                 }
 
-                # Wait a bit between progress updates
-                await asyncio.sleep(0.5)
+                # Start transcription in background
+                import concurrent.futures
+                executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                future = executor.submit(self._transcribe_single_file, audio_path)
 
-                # Check if transcription finished
-                if future.done():
-                    break
+                # Simulate progress while waiting
+                for chunk_idx in range(total_chunks):
+                    chunk_start = chunk_idx * 30
+                    chunk_end = min((chunk_idx + 1) * 30, duration)
 
-            # Get the result
-            result = future.result()
+                    yield {
+                        "status": "processing_chunk",
+                        "chunk_index": chunk_idx,
+                        "chunk_start": chunk_start,
+                        "chunk_end": chunk_end,
+                        "total_chunks": total_chunks,
+                        "message": f"Processing chunk {chunk_idx + 1}/{total_chunks} ({chunk_start:.1f}s - {chunk_end:.1f}s)"
+                    }
 
-            # Yield completion progress
-            yield {
-                "status": "transcription_complete",
-                "message": "Transcription completed successfully",
-                "result": result
-            }
+                    # Wait a bit between progress updates
+                    await asyncio.sleep(0.5)
+
+                    # Check if transcription finished
+                    if future.done():
+                        break
+
+                # Get the result
+                result = future.result()
+
+                # Yield completion progress
+                yield {
+                    "status": "transcription_complete",
+                    "message": "Transcription completed successfully",
+                    "result": result
+                }
 
         except Exception as e:
             logger.error(f"vLLM transcription with progress failed: {e}")

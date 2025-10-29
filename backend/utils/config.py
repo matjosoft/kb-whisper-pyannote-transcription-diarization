@@ -41,12 +41,11 @@ class Settings:
         self.vllm_api_key = os.getenv("VLLM_API_KEY", "token-abc123")
         self.vllm_model_name = os.getenv("VLLM_MODEL_NAME", "openai/whisper-large-v3-turbo")
         self.vllm_max_audio_filesize_mb = int(os.getenv("VLLM_MAX_AUDIO_FILESIZE_MB", "25"))
-        self.vllm_chunk_size_mb = int(os.getenv("VLLM_CHUNK_SIZE_MB", "20"))
 
         # Debug print vLLM settings if enabled
         if self.whisper_use_vllm:
             print(f"🔧 vLLM enabled: {self.vllm_base_url} | Model: {self.vllm_model_name}")
-            print(f"🔧 vLLM chunk size: {self.vllm_chunk_size_mb}MB (max: {self.vllm_max_audio_filesize_mb}MB)")
+            print(f"🔧 vLLM max file size: {self.vllm_max_audio_filesize_mb}MB (large files split into 30s chunks)")
         
         # Pyannote settings
         self.pyannote_model = os.getenv("PYANNOTE_MODEL", "pyannote/speaker-diarization-3.1")

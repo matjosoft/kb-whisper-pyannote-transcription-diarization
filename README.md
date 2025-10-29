@@ -206,8 +206,7 @@ export WHISPER_USE_VLLM=true
 export VLLM_BASE_URL="http://localhost:8000/v1"
 export VLLM_API_KEY="token-abc123"
 export VLLM_MODEL_NAME="openai/whisper-large-v3-turbo"
-export VLLM_MAX_AUDIO_FILESIZE_MB="25"  # Maximum size per request
-export VLLM_CHUNK_SIZE_MB="20"  # Auto-split files larger than this
+export VLLM_MAX_AUDIO_FILESIZE_MB="25"  # Files larger than this are split into 30s chunks
 ```
 
 **Setting up vLLM Server:**
@@ -233,11 +232,11 @@ export VLLM_CHUNK_SIZE_MB="20"  # Auto-split files larger than this
 
 **Large File Handling:**
 
-The application automatically splits large audio files into chunks when using vLLM:
-- Files larger than `VLLM_CHUNK_SIZE_MB` are automatically split
-- Each chunk is processed separately and results are merged
-- Timestamps are automatically adjusted for seamless playback
-- Configure chunk size based on your vLLM server's limits
+The application automatically splits large audio files into 30-second chunks when using vLLM:
+- Files larger than `VLLM_MAX_AUDIO_FILESIZE_MB` are automatically split
+- Each 30-second chunk is processed separately (same as local Whisper)
+- Results are merged with timestamps automatically adjusted
+- Ensures optimal transcription accuracy with consistent chunk size
 
 **Note:** vLLM requires a CUDA-capable GPU for optimal performance.
 
