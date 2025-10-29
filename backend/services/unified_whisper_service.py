@@ -7,31 +7,53 @@ from utils.config import get_settings
 logger = logging.getLogger(__name__)
 
 class UnifiedWhisperService:
-    """Unified service that can use either OpenAI Whisper or local Whisper models"""
-    
+    """Unified service that can use vLLM, local Whisper, or OpenAI Whisper models"""
+
     def __init__(self):
         self.settings = get_settings()
         self.whisper_service = None
         self.local_whisper_service = None
+        self.vllm_whisper_service = None
         self._initialize_services()
     
     def _initialize_services(self):
         """Initialize the appropriate Whisper service based on configuration"""
         try:
-            if self.settings.whisper_use_local:
-                logger.info("Initializing local Whisper service")
-                from .local_whisper_service import LocalWhisperService
-                self.local_whisper_service = LocalWhisperService()
-                if not self.local_whisper_service.is_available():
-                    logger.warning("Local Whisper service failed to initialize, falling back to OpenAI Whisper")
-                    self._initialize_openai_whisper()
+            # Priority 1: vLLM (if enabled)
+            if self.settings.whisper_use_vllm:
+                logger.info("Initializing vLLM Whisper service")
+                from .vllm_whisper_service import VllmWhisperService
+                self.vllm_whisper_service = VllmWhisperService()
+                if not self.vllm_whisper_service.is_available():
+                    logger.warning("vLLM Whisper service failed to initialize, falling back to local or OpenAI Whisper")
+                    if self.settings.whisper_use_local:
+                        self._initialize_local_whisper()
+                    else:
+                        self._initialize_openai_whisper()
+            # Priority 2: Local Whisper (if enabled and vLLM not enabled)
+            elif self.settings.whisper_use_local:
+                self._initialize_local_whisper()
+            # Priority 3: OpenAI Whisper (default fallback)
             else:
                 logger.info("Initializing OpenAI Whisper service")
                 self._initialize_openai_whisper()
-                
+
         except Exception as e:
             logger.error(f"Failed to initialize Whisper services: {e}")
             # Try to fall back to OpenAI Whisper
+            self._initialize_openai_whisper()
+
+    def _initialize_local_whisper(self):
+        """Initialize local Whisper service"""
+        try:
+            logger.info("Initializing local Whisper service")
+            from .local_whisper_service import LocalWhisperService
+            self.local_whisper_service = LocalWhisperService()
+            if not self.local_whisper_service.is_available():
+                logger.warning("Local Whisper service failed to initialize, falling back to OpenAI Whisper")
+                self._initialize_openai_whisper()
+        except Exception as e:
+            logger.error(f"Failed to initialize local Whisper service: {e}")
             self._initialize_openai_whisper()
     
     def _initialize_openai_whisper(self):
@@ -45,7 +67,9 @@ class UnifiedWhisperService:
     
     def is_available(self) -> bool:
         """Check if any Whisper service is available"""
-        if self.settings.whisper_use_local and self.local_whisper_service:
+        if self.settings.whisper_use_vllm and self.vllm_whisper_service:
+            return self.vllm_whisper_service.is_available()
+        elif self.settings.whisper_use_local and self.local_whisper_service:
             return self.local_whisper_service.is_available()
         elif self.whisper_service:
             return self.whisper_service.is_available()
@@ -54,57 +78,81 @@ class UnifiedWhisperService:
     def transcribe(self, audio_path: Path) -> Dict[str, Any]:
         """
         Transcribe audio file using the configured Whisper service
-        
+
         Args:
             audio_path: Path to the audio file
-            
+
         Returns:
             Dictionary containing transcription results with segments and timestamps
         """
         if not self.is_available():
             raise RuntimeError("No Whisper service available")
-        
+
         try:
-            if self.settings.whisper_use_local and self.local_whisper_service and self.local_whisper_service.is_available():
+            # Priority 1: vLLM
+            if self.settings.whisper_use_vllm and self.vllm_whisper_service and self.vllm_whisper_service.is_available():
+                logger.info("Using vLLM Whisper service for transcription")
+                return self.vllm_whisper_service.transcribe(audio_path)
+            # Priority 2: Local Whisper
+            elif self.settings.whisper_use_local and self.local_whisper_service and self.local_whisper_service.is_available():
                 logger.info("Using local Whisper service for transcription")
                 return self.local_whisper_service.transcribe(audio_path)
+            # Priority 3: OpenAI Whisper
             elif self.whisper_service and self.whisper_service.is_available():
                 logger.info("Using OpenAI Whisper service for transcription")
                 return self.whisper_service.transcribe(audio_path)
             else:
                 raise RuntimeError("No available Whisper service for transcription")
-                
+
         except Exception as e:
-            # If local Whisper fails, try to fall back to OpenAI Whisper
-            if (self.settings.whisper_use_local and 
-                self.whisper_service and 
-                self.whisper_service.is_available()):
-                logger.warning(f"Local Whisper failed ({e}), falling back to OpenAI Whisper")
-                return self.whisper_service.transcribe(audio_path)
-            else:
-                raise e
+            # Fallback chain: vLLM -> Local -> OpenAI
+            if self.settings.whisper_use_vllm:
+                # Try local next
+                if self.local_whisper_service and self.local_whisper_service.is_available():
+                    logger.warning(f"vLLM Whisper failed ({e}), falling back to local Whisper")
+                    return self.local_whisper_service.transcribe(audio_path)
+                # Then try OpenAI
+                elif self.whisper_service and self.whisper_service.is_available():
+                    logger.warning(f"vLLM Whisper failed ({e}), falling back to OpenAI Whisper")
+                    return self.whisper_service.transcribe(audio_path)
+            elif self.settings.whisper_use_local:
+                # If local fails, try OpenAI
+                if self.whisper_service and self.whisper_service.is_available():
+                    logger.warning(f"Local Whisper failed ({e}), falling back to OpenAI Whisper")
+                    return self.whisper_service.transcribe(audio_path)
+            raise e
     
     async def transcribe_with_progress(self, audio_path: Path):
         """
         Transcribe audio file with progress updates (streaming)
-        
+
         Args:
             audio_path: Path to the audio file
-            
+
         Yields:
             Progress updates as dictionaries
         """
         if not self.is_available():
             raise RuntimeError("No Whisper service available")
-        
+
         try:
-            if (self.settings.whisper_use_local and
+            # Priority 1: vLLM
+            if (self.settings.whisper_use_vllm and
+                self.vllm_whisper_service and
+                self.vllm_whisper_service.is_available() and
+                hasattr(self.vllm_whisper_service, 'transcribe_with_progress')):
+                logger.info("Using vLLM Whisper service for streaming transcription")
+                async for progress_data in self.vllm_whisper_service.transcribe_with_progress(audio_path):
+                    yield progress_data
+            # Priority 2: Local Whisper
+            elif (self.settings.whisper_use_local and
                 self.local_whisper_service and
                 self.local_whisper_service.is_available() and
                 hasattr(self.local_whisper_service, 'transcribe_with_progress')):
                 logger.info("Using local Whisper service for streaming transcription")
                 async for progress_data in self.local_whisper_service.transcribe_with_progress(audio_path):
                     yield progress_data
+            # Priority 3: Fallback with simulated progress
             else:
                 # Fallback to regular transcription with simulated progress
                 logger.info("Using fallback transcription with simulated progress")
@@ -179,7 +227,11 @@ class UnifiedWhisperService:
     
     def get_model_info(self) -> Dict[str, Any]:
         """Get information about the active model"""
-        if self.settings.whisper_use_local and self.local_whisper_service and self.local_whisper_service.is_available():
+        if self.settings.whisper_use_vllm and self.vllm_whisper_service and self.vllm_whisper_service.is_available():
+            info = self.vllm_whisper_service.get_service_status()
+            info["service_type"] = "vllm"
+            return info
+        elif self.settings.whisper_use_local and self.local_whisper_service and self.local_whisper_service.is_available():
             info = self.local_whisper_service.get_model_info()
             info["service_type"] = "local"
             return info
@@ -245,23 +297,37 @@ class UnifiedWhisperService:
             return False
     
     def get_service_status(self) -> Dict[str, Any]:
-        """Get status of both services"""
+        """Get status of all services"""
+        # Determine current service
+        current_service = "openai"  # default
+        if self.settings.whisper_use_vllm:
+            current_service = "vllm"
+        elif self.settings.whisper_use_local:
+            current_service = "local"
+
         status = {
-            "current_service": "local" if self.settings.whisper_use_local else "openai",
+            "current_service": current_service,
+            "vllm_available": False,
             "local_available": False,
             "openai_available": False,
+            "vllm_info": None,
             "local_model_info": None,
             "openai_model_info": None
         }
-        
+
+        if self.vllm_whisper_service:
+            status["vllm_available"] = self.vllm_whisper_service.is_available()
+            if status["vllm_available"]:
+                status["vllm_info"] = self.vllm_whisper_service.get_service_status()
+
         if self.local_whisper_service:
             status["local_available"] = self.local_whisper_service.is_available()
             if status["local_available"]:
                 status["local_model_info"] = self.local_whisper_service.get_model_info()
-        
+
         if self.whisper_service:
             status["openai_available"] = self.whisper_service.is_available()
             if status["openai_available"]:
                 status["openai_model_info"] = self.whisper_service.get_model_info()
-        
+
         return status
