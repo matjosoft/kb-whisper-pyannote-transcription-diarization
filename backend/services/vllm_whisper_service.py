@@ -32,13 +32,14 @@ class VllmWhisperService:
         """Check if vLLM service is available"""
         return self.client is not None
 
-    def transcribe(self, audio_path: Path) -> Dict[str, Any]:
+    def transcribe(self, audio_path: Path, speaker_segments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Transcribe audio file using vLLM server
-        Automatically chunks large files into 30-second segments if needed
+        Uses speaker segments for chunking if provided, otherwise uses 30-second chunks
 
         Args:
             audio_path: Path to the audio file
+            speaker_segments: Optional diarization results to guide chunking
 
         Returns:
             Dictionary containing transcription results with segments and timestamps
@@ -55,6 +56,11 @@ class VllmWhisperService:
             # Check file size
             file_size_mb = audio_path.stat().st_size / (1024 * 1024)
             logger.info(f"Audio file size: {file_size_mb:.1f}MB")
+
+            # If we have speaker segments, use them for chunking (regardless of file size)
+            if speaker_segments and speaker_segments.get('segments'):
+                logger.info(f"Using {len(speaker_segments['segments'])} speaker segments for chunking")
+                return self._transcribe_with_speaker_chunks(audio_path, speaker_segments)
 
             # If file is larger than max size, split into 30-second chunks
             if file_size_mb > self.settings.vllm_max_audio_filesize_mb:
@@ -284,13 +290,107 @@ class VllmWhisperService:
             logger.error(f"Chunked transcription failed: {e}")
             raise RuntimeError(f"Chunked transcription failed: {str(e)}")
 
-    async def _transcribe_chunked_with_progress(self, audio_path: Path):
+    def _transcribe_with_speaker_chunks(self, audio_path: Path, speaker_segments: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Transcribe a large audio file by splitting it into 30-second chunks
+        Transcribe audio file using speaker segments as chunk boundaries
+        This provides better accuracy by aligning transcription with speaker turns
+
+        Args:
+            audio_path: Path to the audio file
+            speaker_segments: Diarization results with speaker segments
+
+        Returns:
+            Dictionary containing merged transcription results with speaker labels
+        """
+        import torchaudio
+        import tempfile
+
+        logger.info(f"Starting speaker-guided transcription for: {audio_path}")
+
+        try:
+            # Load audio
+            waveform, sample_rate = torchaudio.load(str(audio_path))
+            total_duration = waveform.shape[1] / sample_rate
+            logger.info(f"Audio duration: {total_duration:.1f}s, Sample rate: {sample_rate}Hz")
+
+            segments = speaker_segments.get('segments', [])
+            logger.info(f"Using {len(segments)} speaker segments as chunk boundaries")
+
+            # Process each speaker segment
+            all_segments = []
+            full_text = ""
+
+            with tempfile.TemporaryDirectory() as temp_dir:
+                for chunk_idx, speaker_seg in enumerate(segments):
+                    start_time = speaker_seg['start']
+                    end_time = speaker_seg['end']
+                    speaker_label = speaker_seg.get('speaker_label', 'Speaker 1')
+
+                    logger.info(f"Processing speaker segment {chunk_idx + 1}/{len(segments)}: {start_time:.1f}s - {end_time:.1f}s ({speaker_label})")
+
+                    # Extract chunk
+                    start_sample = int(start_time * sample_rate)
+                    end_sample = int(end_time * sample_rate)
+                    chunk_waveform = waveform[:, start_sample:end_sample]
+
+                    # Save chunk to temporary file
+                    chunk_path = Path(temp_dir) / f"chunk_{chunk_idx}.wav"
+                    torchaudio.save(str(chunk_path), chunk_waveform, sample_rate)
+
+                    chunk_size_mb = chunk_path.stat().st_size / (1024 * 1024)
+                    logger.info(f"Chunk {chunk_idx + 1} size: {chunk_size_mb:.1f}MB")
+
+                    # Transcribe chunk with time offset
+                    try:
+                        chunk_result = self._transcribe_single_file(chunk_path, time_offset=start_time)
+
+                        # Add speaker label to all segments in this chunk
+                        if chunk_result.get("segments"):
+                            for seg in chunk_result["segments"]:
+                                seg['speaker'] = speaker_label
+                            all_segments.extend(chunk_result["segments"])
+
+                        if chunk_result.get("text"):
+                            full_text += " " + chunk_result["text"]
+
+                        logger.info(f"Chunk {chunk_idx + 1} transcription completed: {len(chunk_result.get('segments', []))} segments for {speaker_label}")
+
+                    except Exception as e:
+                        logger.error(f"Failed to transcribe chunk {chunk_idx + 1}: {e}")
+                        # Continue with other chunks even if one fails
+                        continue
+
+            # Calculate final duration
+            duration = total_duration
+            if all_segments:
+                duration = max([seg["end"] for seg in all_segments])
+
+            transcription_result = {
+                "text": full_text.strip(),
+                "language": "unknown",  # Will be detected from first chunk
+                "segments": all_segments,
+                "duration": duration,
+                "model_type": "vllm_speaker_chunked",
+                "num_speakers": speaker_segments.get('num_speakers', 0),
+                "speakers": speaker_segments.get('speakers', {})
+            }
+
+            logger.info(f"Speaker-guided transcription completed. Total segments: {len(all_segments)}, Speakers: {speaker_segments.get('num_speakers', 0)}")
+            return transcription_result
+
+        except Exception as e:
+            logger.error(f"Speaker-guided transcription failed: {e}")
+            raise RuntimeError(f"Speaker-guided transcription failed: {str(e)}")
+
+    async def _transcribe_chunked_with_progress(self, audio_path: Path, speaker_segments: Optional[Dict[str, Any]] = None):
+        """
+        Transcribe a large audio file by splitting it into chunks
+        Uses speaker segments if provided, otherwise uses 30-second chunks
         Yields progress updates for each chunk
 
         Args:
             audio_path: Path to the audio file
+            speaker_segments: Optional diarization results to guide chunking
 
         Yields:
             Progress updates as dictionaries
@@ -308,9 +408,24 @@ class VllmWhisperService:
             total_duration = waveform.shape[1] / sample_rate
             logger.info(f"Audio duration: {total_duration:.1f}s, Sample rate: {sample_rate}Hz")
 
-            # Use fixed 30-second chunks
-            chunk_duration = 30
-            total_chunks = max(1, int(total_duration / chunk_duration) + (1 if total_duration % chunk_duration > 0 else 0))
+            # Determine chunks based on speaker segments or fixed 30-second chunks
+            chunks = []
+            if speaker_segments and speaker_segments.get('segments'):
+                # Use speaker segments as chunk boundaries
+                for seg in speaker_segments['segments']:
+                    chunks.append((seg['start'], seg['end'], seg.get('speaker_label', 'Speaker 1')))
+                total_chunks = len(chunks)
+                logger.info(f"Using {total_chunks} speaker segments as chunk boundaries")
+            else:
+                # Use fixed 30-second chunks
+                chunk_duration = 30
+                total_chunks = max(1, int(total_duration / chunk_duration) + (1 if total_duration % chunk_duration > 0 else 0))
+                current_time = 0.0
+                while current_time < total_duration:
+                    chunk_end = min(current_time + chunk_duration, total_duration)
+                    chunks.append((current_time, chunk_end, None))
+                    current_time = chunk_end
+                logger.info(f"Using {total_chunks} fixed 30-second chunks")
 
             # Yield initial progress
             yield {
@@ -320,28 +435,28 @@ class VllmWhisperService:
                 "duration": total_duration
             }
 
-            # Split audio into 30-second chunks
-            chunks = []
-            current_time = 0.0
-            while current_time < total_duration:
-                chunk_end = min(current_time + chunk_duration, total_duration)
-                chunks.append((current_time, chunk_end))
-                current_time = chunk_end
-
             # Process each chunk
             all_segments = []
             full_text = ""
 
             with tempfile.TemporaryDirectory() as temp_dir:
-                for chunk_idx, (start_time, end_time) in enumerate(chunks):
+                for chunk_idx, chunk_data in enumerate(chunks):
+                    start_time = chunk_data[0]
+                    end_time = chunk_data[1]
+                    speaker_label = chunk_data[2] if len(chunk_data) > 2 else None
+
                     # Yield chunk processing status
+                    message = f"Processing chunk {chunk_idx + 1}/{total_chunks} ({start_time:.1f}s - {end_time:.1f}s)"
+                    if speaker_label:
+                        message += f" - {speaker_label}"
+
                     yield {
                         "status": "processing_chunk",
                         "chunk_index": chunk_idx,
                         "chunk_start": start_time,
                         "chunk_end": end_time,
                         "total_chunks": total_chunks,
-                        "message": f"Processing chunk {chunk_idx + 1}/{total_chunks} ({start_time:.1f}s - {end_time:.1f}s)"
+                        "message": message
                     }
 
                     # Extract chunk
@@ -362,6 +477,11 @@ class VllmWhisperService:
 
                     # Wait for chunk to complete
                     chunk_result = await asyncio.get_event_loop().run_in_executor(None, future.result)
+
+                    # Add speaker label if we have it
+                    if speaker_label and chunk_result.get("segments"):
+                        for seg in chunk_result["segments"]:
+                            seg['speaker'] = speaker_label
 
                     # Merge results
                     if chunk_result.get("segments"):
@@ -401,15 +521,15 @@ class VllmWhisperService:
             }
             raise
 
-    async def transcribe_with_progress(self, audio_path: Path, progress_callback=None):
+    async def transcribe_with_progress(self, audio_path: Path, speaker_segments: Optional[Dict[str, Any]] = None, progress_callback=None):
         """
         Transcribe audio file with progress updates
 
-        For large files, yields real progress from actual chunk processing.
-        For small files, simulates progress updates.
+        Uses speaker segments for chunking if provided, otherwise uses file-size based chunking.
 
         Args:
             audio_path: Path to the audio file
+            speaker_segments: Optional diarization results to guide chunking
             progress_callback: Optional callback function for progress updates
 
         Yields:
@@ -427,14 +547,21 @@ class VllmWhisperService:
 
             logger.info(f"Transcribing audio file with vLLM (streaming mode): {audio_path}")
 
-            # Check if file needs chunking
+            # If we have speaker segments, use them for chunking
+            if speaker_segments and speaker_segments.get('segments'):
+                logger.info("Using speaker-guided chunking with real progress updates")
+                async for progress_data in self._transcribe_chunked_with_progress(audio_path, speaker_segments=speaker_segments):
+                    yield progress_data
+                return
+
+            # Check if file needs chunking based on size
             file_size_mb = audio_path.stat().st_size / (1024 * 1024)
             needs_chunking = file_size_mb > self.settings.vllm_max_audio_filesize_mb
 
             if needs_chunking:
                 # Use real chunked transcription with actual progress
-                logger.info("Using chunked transcription with real progress updates")
-                async for progress_data in self._transcribe_chunked_with_progress(audio_path):
+                logger.info("Using file-size based chunking with real progress updates")
+                async for progress_data in self._transcribe_chunked_with_progress(audio_path, speaker_segments=None):
                     yield progress_data
             else:
                 # For small files, simulate progress

@@ -75,12 +75,13 @@ class UnifiedWhisperService:
             return self.whisper_service.is_available()
         return False
     
-    def transcribe(self, audio_path: Path) -> Dict[str, Any]:
+    def transcribe(self, audio_path: Path, speaker_segments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Transcribe audio file using the configured Whisper service
 
         Args:
             audio_path: Path to the audio file
+            speaker_segments: Optional diarization results to guide chunking
 
         Returns:
             Dictionary containing transcription results with segments and timestamps
@@ -92,11 +93,11 @@ class UnifiedWhisperService:
             # Priority 1: vLLM
             if self.settings.whisper_use_vllm and self.vllm_whisper_service and self.vllm_whisper_service.is_available():
                 logger.info("Using vLLM Whisper service for transcription")
-                return self.vllm_whisper_service.transcribe(audio_path)
+                return self.vllm_whisper_service.transcribe(audio_path, speaker_segments=speaker_segments)
             # Priority 2: Local Whisper
             elif self.settings.whisper_use_local and self.local_whisper_service and self.local_whisper_service.is_available():
                 logger.info("Using local Whisper service for transcription")
-                return self.local_whisper_service.transcribe(audio_path)
+                return self.local_whisper_service.transcribe(audio_path, speaker_segments=speaker_segments)
             # Priority 3: OpenAI Whisper
             elif self.whisper_service and self.whisper_service.is_available():
                 logger.info("Using OpenAI Whisper service for transcription")
@@ -110,7 +111,7 @@ class UnifiedWhisperService:
                 # Try local next
                 if self.local_whisper_service and self.local_whisper_service.is_available():
                     logger.warning(f"vLLM Whisper failed ({e}), falling back to local Whisper")
-                    return self.local_whisper_service.transcribe(audio_path)
+                    return self.local_whisper_service.transcribe(audio_path, speaker_segments=speaker_segments)
                 # Then try OpenAI
                 elif self.whisper_service and self.whisper_service.is_available():
                     logger.warning(f"vLLM Whisper failed ({e}), falling back to OpenAI Whisper")
@@ -122,12 +123,13 @@ class UnifiedWhisperService:
                     return self.whisper_service.transcribe(audio_path)
             raise e
     
-    async def transcribe_with_progress(self, audio_path: Path):
+    async def transcribe_with_progress(self, audio_path: Path, speaker_segments: Optional[Dict[str, Any]] = None):
         """
         Transcribe audio file with progress updates (streaming)
 
         Args:
             audio_path: Path to the audio file
+            speaker_segments: Optional diarization results to guide chunking
 
         Yields:
             Progress updates as dictionaries
@@ -142,7 +144,7 @@ class UnifiedWhisperService:
                 self.vllm_whisper_service.is_available() and
                 hasattr(self.vllm_whisper_service, 'transcribe_with_progress')):
                 logger.info("Using vLLM Whisper service for streaming transcription")
-                async for progress_data in self.vllm_whisper_service.transcribe_with_progress(audio_path):
+                async for progress_data in self.vllm_whisper_service.transcribe_with_progress(audio_path, speaker_segments=speaker_segments):
                     yield progress_data
             # Priority 2: Local Whisper
             elif (self.settings.whisper_use_local and
@@ -150,67 +152,91 @@ class UnifiedWhisperService:
                 self.local_whisper_service.is_available() and
                 hasattr(self.local_whisper_service, 'transcribe_with_progress')):
                 logger.info("Using local Whisper service for streaming transcription")
-                async for progress_data in self.local_whisper_service.transcribe_with_progress(audio_path):
+                async for progress_data in self.local_whisper_service.transcribe_with_progress(audio_path, speaker_segments=speaker_segments):
                     yield progress_data
             # Priority 3: Fallback with simulated progress
             else:
                 # Fallback to regular transcription with simulated progress
                 logger.info("Using fallback transcription with simulated progress")
-                
+
                 # Simulate progress for non-streaming services
                 yield {
                     "status": "starting",
                     "message": "Preparing transcription..."
                 }
-                
+
                 # Estimate duration and chunks
                 import torchaudio
                 try:
                     waveform, sample_rate = torchaudio.load(str(audio_path))
                     duration = waveform.shape[1] / sample_rate
-                    total_chunks = max(1, int(duration / 30) + (1 if duration % 30 > 0 else 0))
+
+                    # Use speaker segments if available, otherwise fixed 30s chunks
+                    if speaker_segments and speaker_segments.get('segments'):
+                        total_chunks = len(speaker_segments['segments'])
+                    else:
+                        total_chunks = max(1, int(duration / 30) + (1 if duration % 30 > 0 else 0))
                 except:
                     duration = 120.0  # Default estimate
                     total_chunks = 4
-                
+
                 yield {
                     "status": "transcribing",
                     "message": f"Starting transcription of {duration:.1f}s audio in {total_chunks} chunks...",
                     "total_chunks": total_chunks,
                     "duration": duration
                 }
-                
-                # Simulate chunk processing
-                for chunk_idx in range(total_chunks):
-                    chunk_start = chunk_idx * 30
-                    chunk_end = min((chunk_idx + 1) * 30, duration)
-                    
-                    yield {
-                        "status": "processing_chunk",
-                        "chunk_index": chunk_idx,
-                        "chunk_start": chunk_start,
-                        "chunk_end": chunk_end,
-                        "total_chunks": total_chunks,
-                        "message": f"Processing chunk {chunk_idx + 1}/{total_chunks} ({chunk_start:.1f}s - {chunk_end:.1f}s)"
-                    }
-                    
-                    # Small delay to make progress visible
-                    import asyncio
-                    await asyncio.sleep(0.5)
-                
+
+                # Simulate chunk processing based on speaker segments or fixed chunks
+                if speaker_segments and speaker_segments.get('segments'):
+                    for chunk_idx, segment in enumerate(speaker_segments['segments']):
+                        chunk_start = segment['start']
+                        chunk_end = segment['end']
+
+                        yield {
+                            "status": "processing_chunk",
+                            "chunk_index": chunk_idx,
+                            "chunk_start": chunk_start,
+                            "chunk_end": chunk_end,
+                            "total_chunks": total_chunks,
+                            "message": f"Processing chunk {chunk_idx + 1}/{total_chunks} ({chunk_start:.1f}s - {chunk_end:.1f}s)"
+                        }
+
+                        # Small delay to make progress visible
+                        import asyncio
+                        await asyncio.sleep(0.5)
+                else:
+                    # Use fixed 30s chunks
+                    for chunk_idx in range(total_chunks):
+                        chunk_start = chunk_idx * 30
+                        chunk_end = min((chunk_idx + 1) * 30, duration)
+
+                        yield {
+                            "status": "processing_chunk",
+                            "chunk_index": chunk_idx,
+                            "chunk_start": chunk_start,
+                            "chunk_end": chunk_end,
+                            "total_chunks": total_chunks,
+                            "message": f"Processing chunk {chunk_idx + 1}/{total_chunks} ({chunk_start:.1f}s - {chunk_end:.1f}s)"
+                        }
+
+                        # Small delay to make progress visible
+                        import asyncio
+                        await asyncio.sleep(0.5)
+
                 yield {
                     "status": "finalizing_transcription",
                     "message": "Finalizing transcription..."
                 }
-                
+
                 # Perform actual transcription using regular method for non-streaming services
                 if self.settings.whisper_use_local and self.local_whisper_service and self.local_whisper_service.is_available():
-                    result = self.local_whisper_service.transcribe(audio_path)
+                    result = self.local_whisper_service.transcribe(audio_path, speaker_segments=speaker_segments)
                 elif self.whisper_service and self.whisper_service.is_available():
                     result = self.whisper_service.transcribe(audio_path)
                 else:
                     raise RuntimeError("No available Whisper service for transcription")
-                
+
                 yield {
                     "status": "transcription_complete",
                     "result": result,

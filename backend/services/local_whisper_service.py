@@ -126,25 +126,32 @@ class LocalWhisperService:
             logger.error(f"Failed to load audio: {e}")
             raise RuntimeError(f"Audio loading failed: {str(e)}")
     
-    def transcribe(self, audio_path: Path) -> Dict[str, Any]:
+    def transcribe(self, audio_path: Path, speaker_segments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Transcribe audio file using local Whisper model
-        
+        Uses speaker segments for chunking if provided
+
         Args:
             audio_path: Path to the audio file
-            
+            speaker_segments: Optional diarization results to guide chunking
+
         Returns:
             Dictionary containing transcription results with segments and timestamps
         """
         if not self.is_available():
             raise RuntimeError("Local Whisper model not available")
-        
+
         if not audio_path.exists():
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
-        
+
         try:
             logger.info(f"Transcribing audio file with local Whisper: {audio_path}")
-            
+
+            # If we have speaker segments, use them for chunking
+            if speaker_segments and speaker_segments.get('segments'):
+                logger.info(f"Using {len(speaker_segments['segments'])} speaker segments for chunking")
+                return self._transcribe_with_speaker_chunks(audio_path, speaker_segments)
+
             # Load and preprocess audio
             audio_array = self._load_audio(audio_path)
             
@@ -213,12 +220,134 @@ class LocalWhisperService:
             
             logger.info(f"Local transcription completed. Found {len(segments)} segments")
             return transcription_result
-            
+
         except Exception as e:
             logger.error(f"Local transcription failed: {e}")
             raise RuntimeError(f"Local transcription failed: {str(e)}")
-    
-    async def transcribe_with_progress(self, audio_path: Path, progress_callback=None):
+
+    def _transcribe_with_speaker_chunks(self, audio_path: Path, speaker_segments: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Transcribe audio file using speaker segments as chunk boundaries
+        This provides better accuracy by aligning transcription with speaker turns
+
+        Args:
+            audio_path: Path to the audio file
+            speaker_segments: Diarization results with speaker segments
+
+        Returns:
+            Dictionary containing merged transcription results with speaker labels
+        """
+        import tempfile
+
+        logger.info(f"Starting speaker-guided transcription for: {audio_path}")
+
+        try:
+            # Load audio
+            waveform, sample_rate = torchaudio.load(str(audio_path))
+            total_duration = waveform.shape[1] / sample_rate
+            logger.info(f"Audio duration: {total_duration:.1f}s, Sample rate: {sample_rate}Hz")
+
+            segments_list = speaker_segments.get('segments', [])
+            logger.info(f"Using {len(segments_list)} speaker segments as chunk boundaries")
+
+            # Process each speaker segment
+            all_segments = []
+            full_text = ""
+
+            # Set language if specified
+            generate_kwargs = {}
+            if self.settings.whisper_language != "auto":
+                generate_kwargs["language"] = self.settings.whisper_language
+
+            with tempfile.TemporaryDirectory() as temp_dir:
+                for chunk_idx, speaker_seg in enumerate(segments_list):
+                    start_time = speaker_seg['start']
+                    end_time = speaker_seg['end']
+                    speaker_label = speaker_seg.get('speaker_label', 'Speaker 1')
+
+                    logger.info(f"Processing speaker segment {chunk_idx + 1}/{len(segments_list)}: {start_time:.1f}s - {end_time:.1f}s ({speaker_label})")
+
+                    # Extract chunk
+                    start_sample = int(start_time * sample_rate)
+                    end_sample = int(end_time * sample_rate)
+                    chunk_waveform = waveform[:, start_sample:end_sample]
+
+                    # Convert to numpy array
+                    chunk_array = chunk_waveform.squeeze().numpy()
+
+                    # Transcribe chunk
+                    try:
+                        chunk_result = self.pipe(
+                            chunk_array,
+                            chunk_length_s=30,
+                            stride_length_s=5,
+                            return_timestamps=True,
+                            generate_kwargs=generate_kwargs
+                        )
+
+                        # Process chunk results
+                        if "chunks" in chunk_result:
+                            for chunk in chunk_result["chunks"]:
+                                timestamp = chunk.get("timestamp", [0, 0])
+                                chunk_start = timestamp[0] if timestamp[0] is not None else 0
+                                chunk_end = timestamp[1] if timestamp[1] is not None else chunk_start + 1
+                                text = chunk.get("text", "").strip()
+
+                                if text:
+                                    segment_data = {
+                                        "start": start_time + chunk_start,  # Add offset
+                                        "end": start_time + chunk_end,      # Add offset
+                                        "text": text,
+                                        "speaker": speaker_label,
+                                        "words": []
+                                    }
+                                    all_segments.append(segment_data)
+                                    full_text += text + " "
+                        else:
+                            # Fallback if chunks are not available
+                            text = chunk_result.get("text", "").strip()
+                            if text:
+                                all_segments.append({
+                                    "start": start_time,
+                                    "end": end_time,
+                                    "text": text,
+                                    "speaker": speaker_label,
+                                    "words": []
+                                })
+                                full_text += text + " "
+
+                        logger.info(f"Chunk {chunk_idx + 1} transcription completed for {speaker_label}")
+
+                    except Exception as e:
+                        logger.error(f"Failed to transcribe chunk {chunk_idx + 1}: {e}")
+                        # Continue with other chunks even if one fails
+                        continue
+
+            # Detect language
+            detected_language = "unknown"
+            if self.settings.whisper_language != "auto":
+                detected_language = self.settings.whisper_language
+            else:
+                detected_language = "auto-detected"
+
+            transcription_result = {
+                "text": full_text.strip(),
+                "language": detected_language,
+                "segments": all_segments,
+                "duration": total_duration,
+                "model_type": "local_whisper_speaker_chunked",
+                "num_speakers": speaker_segments.get('num_speakers', 0),
+                "speakers": speaker_segments.get('speakers', {})
+            }
+
+            logger.info(f"Speaker-guided transcription completed. Total segments: {len(all_segments)}, Speakers: {speaker_segments.get('num_speakers', 0)}")
+            return transcription_result
+
+        except Exception as e:
+            logger.error(f"Speaker-guided transcription failed: {e}")
+            raise RuntimeError(f"Speaker-guided transcription failed: {str(e)}")
+
+    async def transcribe_with_progress(self, audio_path: Path, speaker_segments: Optional[Dict[str, Any]] = None, progress_callback=None):
         """
         Transcribe audio file with progress updates for streaming
         

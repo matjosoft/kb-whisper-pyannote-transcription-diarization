@@ -112,17 +112,22 @@ async def transcribe_audio(file_id: str):
         
         # Convert audio to WAV format if needed
         wav_path = audio_service.convert_to_wav(audio_file)
-        
-        # Perform transcription with Whisper
-        transcription_result = whisper_service.transcribe(wav_path)
-        
-        # Perform speaker diarization with Pyannote
+
+        # DIARIZATION FIRST: Perform speaker diarization with Pyannote
+        # This allows us to use speaker segments to guide transcription chunking
         try:
             diarization_result = pyannote_service.diarize(wav_path)
-            logger.info("Diarization completed successfully")
+            logger.info(f"Diarization completed successfully: found {diarization_result.get('num_speakers', 0)} speakers")
         except Exception as e:
             logger.error(f"Diarization failed: {e}")
-            # Fallback to single speaker if diarization fails
+            # Fallback to None if diarization fails (will use fixed chunks instead)
+            diarization_result = None
+
+        # Perform transcription with Whisper, using speaker segments for better chunking
+        transcription_result = whisper_service.transcribe(wav_path, speaker_segments=diarization_result)
+
+        # Re-run diarization if it failed initially (for fallback to single speaker)
+        if diarization_result is None:
             diarization_result = {
                 "num_speakers": 1,
                 "speakers": {"SPEAKER_00": "Speaker 1"},
@@ -190,31 +195,51 @@ async def transcribe_audio_stream(file_id: str):
             # Send initial status
             yield f"data: {json.dumps({'status': 'starting', 'message': 'Preparing audio file...'})}\n\n"
             await asyncio.sleep(0.1)
-            
+
             # Convert audio to WAV format if needed
             wav_path = audio_service.convert_to_wav(audio_file)
-            
+
+            # DIARIZATION FIRST: Perform speaker diarization with Pyannote
+            # This allows us to use speaker segments to guide transcription chunking
+            yield f"data: {json.dumps({'status': 'diarizing', 'message': 'Analyzing speakers...'})}\n\n"
+            await asyncio.sleep(0.1)
+
+            try:
+                diarization_result = pyannote_service.diarize(wav_path)
+                logger.info(f"Diarization completed successfully: found {diarization_result.get('num_speakers', 0)} speakers")
+                num_speakers = diarization_result.get('num_speakers', 0)
+                yield f"data: {json.dumps({'status': 'diarization_complete', 'message': f'Found {num_speakers} speakers', 'num_speakers': num_speakers})}\n\n"
+            except Exception as e:
+                logger.error(f"Diarization failed: {e}")
+                # Fallback to None if diarization fails (will use fixed chunks instead)
+                diarization_result = None
+                yield f"data: {json.dumps({'status': 'diarization_failed', 'message': 'Speaker detection failed, using fixed chunks...'})}\n\n"
+
             # Get audio duration for progress calculation
             import torchaudio
             try:
                 waveform, sample_rate = torchaudio.load(str(wav_path))
                 duration = waveform.shape[1] / sample_rate
-                chunk_duration = 30  # 30 second chunks
-                total_chunks = max(1, int(duration / chunk_duration) + (1 if duration % chunk_duration > 0 else 0))
+                # Calculate chunks based on speaker segments or fixed 30s chunks
+                if diarization_result and diarization_result.get('segments'):
+                    total_chunks = len(diarization_result['segments'])
+                else:
+                    chunk_duration = 30
+                    total_chunks = max(1, int(duration / chunk_duration) + (1 if duration % chunk_duration > 0 else 0))
             except:
                 duration = 0
                 total_chunks = 1
-            
+
             yield f"data: {json.dumps({'status': 'transcribing', 'message': f'Starting transcription of {duration:.1f}s audio in {total_chunks} chunks...', 'total_chunks': total_chunks, 'duration': duration})}\n\n"
             await asyncio.sleep(0.1)
-            
-            # Perform transcription with progress updates using the unified whisper service
+
+            # Perform transcription with progress updates, using speaker segments for better chunking
             transcription_result = None
-            
+
             # Use the unified whisper service's streaming method
             if hasattr(whisper_service, 'transcribe_with_progress'):
-                logger.info("Using unified whisper service streaming transcription")
-                async for progress_data in whisper_service.transcribe_with_progress(wav_path):
+                logger.info("Using unified whisper service streaming transcription with speaker-guided chunks")
+                async for progress_data in whisper_service.transcribe_with_progress(wav_path, speaker_segments=diarization_result):
                     yield f"data: {json.dumps(progress_data)}\n\n"
                     await asyncio.sleep(0.01)
                     if progress_data.get('status') == 'transcription_complete' and 'result' in progress_data:
@@ -222,27 +247,30 @@ async def transcribe_audio_stream(file_id: str):
             else:
                 # Fallback to regular transcription with simulated progress
                 logger.info("Using fallback transcription with simulated progress")
-                for chunk_idx in range(total_chunks):
-                    chunk_start = chunk_idx * chunk_duration
-                    chunk_end = min((chunk_idx + 1) * chunk_duration, duration)
-                    
-                    yield f"data: {json.dumps({'status': 'processing_chunk', 'chunk_index': chunk_idx, 'chunk_start': chunk_start, 'chunk_end': chunk_end, 'total_chunks': total_chunks, 'message': f'Processing chunk {chunk_idx + 1}/{total_chunks} ({chunk_start:.1f}s - {chunk_end:.1f}s)'})}\n\n"
-                    await asyncio.sleep(0.5)  # Simulate processing time
-                
-                # Perform actual transcription
+                if diarization_result and diarization_result.get('segments'):
+                    # Use speaker segments for simulated progress
+                    for chunk_idx, segment in enumerate(diarization_result['segments']):
+                        chunk_start = segment['start']
+                        chunk_end = segment['end']
+
+                        yield f"data: {json.dumps({'status': 'processing_chunk', 'chunk_index': chunk_idx, 'chunk_start': chunk_start, 'chunk_end': chunk_end, 'total_chunks': total_chunks, 'message': f'Processing chunk {chunk_idx + 1}/{total_chunks} ({chunk_start:.1f}s - {chunk_end:.1f}s)'})}\n\n"
+                        await asyncio.sleep(0.5)  # Simulate processing time
+                else:
+                    # Use fixed 30s chunks
+                    chunk_duration = 30
+                    for chunk_idx in range(total_chunks):
+                        chunk_start = chunk_idx * chunk_duration
+                        chunk_end = min((chunk_idx + 1) * chunk_duration, duration)
+
+                        yield f"data: {json.dumps({'status': 'processing_chunk', 'chunk_index': chunk_idx, 'chunk_start': chunk_start, 'chunk_end': chunk_end, 'total_chunks': total_chunks, 'message': f'Processing chunk {chunk_idx + 1}/{total_chunks} ({chunk_start:.1f}s - {chunk_end:.1f}s)'})}\n\n"
+                        await asyncio.sleep(0.5)  # Simulate processing time
+
+                # Perform actual transcription with speaker segments
                 yield f"data: {json.dumps({'status': 'finalizing_transcription', 'message': 'Finalizing transcription...'})}\n\n"
-                transcription_result = whisper_service.transcribe(wav_path)
-            
-            yield f"data: {json.dumps({'status': 'diarizing', 'message': 'Analyzing speakers...'})}\n\n"
-            await asyncio.sleep(0.1)
-            
-            # Perform speaker diarization
-            try:
-                diarization_result = pyannote_service.diarize(wav_path)
-                logger.info("Diarization completed successfully")
-            except Exception as e:
-                logger.error(f"Diarization failed: {e}")
-                # Fallback to single speaker if diarization fails
+                transcription_result = whisper_service.transcribe(wav_path, speaker_segments=diarization_result)
+
+            # Re-run diarization if it failed initially (for fallback to single speaker)
+            if diarization_result is None:
                 diarization_result = {
                     "num_speakers": 1,
                     "speakers": {"SPEAKER_00": "Speaker 1"},

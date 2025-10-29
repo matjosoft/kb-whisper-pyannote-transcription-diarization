@@ -95,55 +95,79 @@ class AudioService:
             return {}
     
     def merge_transcription_diarization(
-        self, 
-        transcription: Dict[str, Any], 
+        self,
+        transcription: Dict[str, Any],
         diarization: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Merge Whisper transcription results with Pyannote diarization results
-        
+
         Args:
             transcription: Results from Whisper transcription
             diarization: Results from Pyannote diarization
-            
+
         Returns:
             Merged results with speaker-attributed text segments
         """
         try:
             logger.info("Merging transcription and diarization results")
-            
+
             transcription_segments = transcription.get("segments", [])
             diarization_segments = diarization.get("segments", [])
-            
+
             if not transcription_segments:
                 logger.warning("No transcription segments found")
                 return self._create_empty_result()
-            
+
             if not diarization_segments:
                 logger.warning("No diarization segments found, using single speaker")
                 return self._assign_single_speaker(transcription)
-            
-            # Merge segments by finding overlaps
+
+            # Check if transcription segments already have speaker labels
+            # (this happens when we use speaker-guided chunking)
+            if transcription_segments[0].get("speaker") is not None:
+                logger.info("Transcription segments already have speaker labels (speaker-guided transcription)")
+                # Just group consecutive segments from the same speaker
+                grouped_segments = self._group_consecutive_speaker_segments(transcription_segments)
+
+                # Create speaker mapping
+                speakers = list(set(seg["speaker"] for seg in grouped_segments))
+                speaker_mapping = {speaker: speaker for speaker in sorted(speakers)}
+
+                result = {
+                    "segments": grouped_segments,
+                    "speakers": speaker_mapping,
+                    "num_speakers": len(speakers),
+                    "language": transcription.get("language", "unknown"),
+                    "duration": transcription.get("duration", 0),
+                    "full_text": " ".join(seg["text"] for seg in grouped_segments)
+                }
+
+                logger.info(f"Merge completed (speaker-aligned). {len(grouped_segments)} final segments with {len(speakers)} speakers")
+                return result
+
+            # Original overlap-based merging for fixed-chunk transcription
+            logger.info("Using overlap-based merging for fixed-chunk transcription")
             merged_segments = []
-            
+
             for trans_seg in transcription_segments:
                 trans_start = trans_seg["start"]
                 trans_end = trans_seg["end"]
                 trans_text = trans_seg["text"]
-                
+
                 # Find the diarization segment with the most overlap
                 best_speaker = "Speaker 1"  # Default fallback
                 best_overlap = 0
-                
+
                 for diar_seg in diarization_segments:
                     diar_start = diar_seg["start"]
                     diar_end = diar_seg["end"]
-                    
+
                     # Calculate overlap
                     overlap_start = max(trans_start, diar_start)
                     overlap_end = min(trans_end, diar_end)
                     overlap_duration = max(0, overlap_end - overlap_start)
-                    
+
                     if overlap_duration > best_overlap:
                         best_overlap = overlap_duration
                         best_speaker = diar_seg["speaker_label"]
