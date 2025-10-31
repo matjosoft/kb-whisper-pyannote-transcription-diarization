@@ -116,7 +116,8 @@ class ExportService:
                 for segment in segments:
                     text = segment.get('text', '').strip()
                     text_para = doc.add_paragraph(text)
-                    text_para.paragraph_format.space_after = Pt(12)
+                    # No extra spacing - use default paragraph spacing
+                    text_para.paragraph_format.space_after = Pt(0)
             else:
                 # Standard mode: Show speaker and timestamp
                 for segment in segments:
@@ -235,7 +236,8 @@ class ExportService:
 
                     text_para = doc.paragraphs[transcription_insert_index]
                     text_para.add_run(text)
-                    text_para.paragraph_format.space_after = Pt(12)
+                    # No extra spacing - use default paragraph spacing
+                    text_para.paragraph_format.space_after = Pt(0)
 
                     transcription_insert_index += 1
                 else:
