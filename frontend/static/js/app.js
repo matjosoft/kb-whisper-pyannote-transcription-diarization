@@ -200,7 +200,10 @@ class AudioScribeApp {
                 fileId = await this.uploadFile(audioData);
             }
 
-            this.showProcessing('Transcribing and analyzing speakers...');
+            const processingMessage = this.transcriptionOnlyMode
+                ? 'Transcribing...'
+                : 'Transcribing and analyzing speakers...';
+            this.showProcessing(processingMessage);
             const results = await this.transcribeAudio(fileId);
 
             // Only hide processing after successful completion
