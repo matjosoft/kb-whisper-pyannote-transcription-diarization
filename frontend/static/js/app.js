@@ -6,7 +6,8 @@ class AudioScribeApp {
         this.isProcessing = false;
         this.karaokePlayer = null;
         this.currentAudioFile = null;
-        
+        this.transcriptionOnlyMode = false;
+
         this.initializeElements();
         this.setupEventListeners();
         this.initializeRecorder();
@@ -14,19 +15,22 @@ class AudioScribeApp {
     }
 
     initializeElements() {
+        // Settings elements
+        this.transcriptionOnlyToggle = document.getElementById('transcriptionOnlyToggle');
+
         // Recording elements
         this.recordBtn = document.getElementById('recordBtn');
         this.recordingStatus = document.getElementById('recordingStatus');
         this.recordingInfo = document.getElementById('recordingInfo');
-        
+
         // Upload elements
         this.uploadArea = document.getElementById('uploadArea');
         this.fileInput = document.getElementById('fileInput');
-        
+
         // Processing elements
         this.processingSection = document.getElementById('processingSection');
         this.processingText = document.getElementById('processingText');
-        
+
         // Results elements
         this.resultsSection = document.getElementById('resultsSection');
         this.speakerEditor = document.getElementById('speakerEditor');
@@ -38,16 +42,21 @@ class AudioScribeApp {
     }
 
     setupEventListeners() {
+        // Transcription-only toggle
+        this.transcriptionOnlyToggle.addEventListener('change', (e) => {
+            this.transcriptionOnlyMode = e.target.checked;
+        });
+
         // Recording button
         this.recordBtn.addEventListener('click', () => this.toggleRecording());
-        
+
         // File upload
         this.uploadArea.addEventListener('click', () => this.fileInput.click());
         this.uploadArea.addEventListener('dragover', (e) => this.handleDragOver(e));
         this.uploadArea.addEventListener('dragleave', (e) => this.handleDragLeave(e));
         this.uploadArea.addEventListener('drop', (e) => this.handleDrop(e));
         this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
-        
+
         // Recording completion
         document.addEventListener('recordingComplete', (e) => this.handleRecordingComplete(e));
 
@@ -191,7 +200,10 @@ class AudioScribeApp {
                 fileId = await this.uploadFile(audioData);
             }
 
-            this.showProcessing('Transcribing and analyzing speakers...');
+            const processingMessage = this.transcriptionOnlyMode
+                ? 'Transcribing...'
+                : 'Transcribing and analyzing speakers...';
+            this.showProcessing(processingMessage);
             const results = await this.transcribeAudio(fileId);
 
             // Only hide processing after successful completion
@@ -256,7 +268,8 @@ class AudioScribeApp {
     async transcribeWithStreaming(fileId) {
         return new Promise((resolve, reject) => {
             console.log('Attempting streaming transcription...');
-            const eventSource = new EventSource(`/api/transcribe-stream/${fileId}`);
+            const transcriptionOnlyParam = this.transcriptionOnlyMode ? '?transcription_only=true' : '';
+            const eventSource = new EventSource(`/api/transcribe-stream/${fileId}${transcriptionOnlyParam}`);
             let finalResult = null;
             let hasReceivedData = false;
             

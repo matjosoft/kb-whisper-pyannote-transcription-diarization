@@ -170,9 +170,9 @@ import asyncio
 import json
 
 @app.get("/api/transcribe-stream/{file_id}")
-async def transcribe_audio_stream(file_id: str):
+async def transcribe_audio_stream(file_id: str, transcription_only: bool = False):
     """Transcribe and diarize audio file with streaming progress updates"""
-    logger.info(f"Starting streaming transcription for file_id: {file_id}")
+    logger.info(f"Starting streaming transcription for file_id: {file_id}, transcription_only: {transcription_only}")
     
     async def generate_progress():
         try:
@@ -232,44 +232,52 @@ async def transcribe_audio_stream(file_id: str):
                 # Perform actual transcription
                 yield f"data: {json.dumps({'status': 'finalizing_transcription', 'message': 'Finalizing transcription...'})}\n\n"
                 transcription_result = whisper_service.transcribe(wav_path)
-            
-            yield f"data: {json.dumps({'status': 'diarizing', 'message': 'Analyzing speakers...'})}\n\n"
-            await asyncio.sleep(0.1)
-            
-            # Perform speaker diarization
-            try:
-                diarization_result = pyannote_service.diarize(wav_path)
-                logger.info("Diarization completed successfully")
-            except Exception as e:
-                logger.error(f"Diarization failed: {e}")
-                # Fallback to single speaker if diarization fails
-                diarization_result = {
-                    "num_speakers": 1,
-                    "speakers": {"SPEAKER_00": "Speaker 1"},
-                    "segments": [{
-                        "start": 0.0,
-                        "end": transcription_result.get("duration", 0),
-                        "speaker": "SPEAKER_00",
-                        "speaker_label": "Speaker 1",
-                        "speaker_id": 1,
+
+            # Conditionally perform diarization based on transcription_only flag
+            if transcription_only:
+                # Skip diarization and assign single speaker
+                logger.info("Transcription-only mode: Skipping diarization")
+                yield f"data: {json.dumps({'status': 'merging', 'message': 'Formatting transcription results...'})}\n\n"
+                await asyncio.sleep(0.1)
+                merged_result = audio_service.format_transcription_only(transcription_result)
+            else:
+                # Perform speaker diarization
+                yield f"data: {json.dumps({'status': 'diarizing', 'message': 'Analyzing speakers...'})}\n\n"
+                await asyncio.sleep(0.1)
+
+                try:
+                    diarization_result = pyannote_service.diarize(wav_path)
+                    logger.info("Diarization completed successfully")
+                except Exception as e:
+                    logger.error(f"Diarization failed: {e}")
+                    # Fallback to single speaker if diarization fails
+                    diarization_result = {
+                        "num_speakers": 1,
+                        "speakers": {"SPEAKER_00": "Speaker 1"},
+                        "segments": [{
+                            "start": 0.0,
+                            "end": transcription_result.get("duration", 0),
+                            "speaker": "SPEAKER_00",
+                            "speaker_label": "Speaker 1",
+                            "speaker_id": 1,
+                            "duration": transcription_result.get("duration", 0)
+                        }],
                         "duration": transcription_result.get("duration", 0)
-                    }],
-                    "duration": transcription_result.get("duration", 0)
-                }
-            
-            yield f"data: {json.dumps({'status': 'merging', 'message': 'Merging transcription and speaker data...'})}\n\n"
-            await asyncio.sleep(0.1)
-            
-            # Merge transcription and diarization results
-            try:
-                merged_result = audio_service.merge_transcription_diarization(
-                    transcription_result, diarization_result
-                )
-                logger.info("Results merged successfully")
-            except Exception as e:
-                logger.error(f"Merging failed: {e}")
-                # Fallback to transcription only
-                merged_result = audio_service._assign_single_speaker(transcription_result)
+                    }
+
+                yield f"data: {json.dumps({'status': 'merging', 'message': 'Merging transcription and speaker data...'})}\n\n"
+                await asyncio.sleep(0.1)
+
+                # Merge transcription and diarization results
+                try:
+                    merged_result = audio_service.merge_transcription_diarization(
+                        transcription_result, diarization_result
+                    )
+                    logger.info("Results merged successfully")
+                except Exception as e:
+                    logger.error(f"Merging failed: {e}")
+                    # Fallback to transcription only
+                    merged_result = audio_service.format_transcription_only(transcription_result)
             
             # Send final result
             yield f"data: {json.dumps({'status': 'completed', 'result': merged_result, 'message': 'Transcription completed successfully'})}\n\n"

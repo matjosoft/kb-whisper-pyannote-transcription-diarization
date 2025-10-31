@@ -211,8 +211,16 @@ class AudioService:
         
         return grouped
     
-    def _assign_single_speaker(self, transcription: Dict[str, Any]) -> Dict[str, Any]:
-        """Assign all transcription to a single speaker when diarization fails"""
+    def format_transcription_only(self, transcription: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Format transcription results for transcription-only mode (no diarization)
+
+        Args:
+            transcription: Results from Whisper transcription
+
+        Returns:
+            Formatted results with all segments assigned to a single speaker
+        """
         segments = []
         for seg in transcription.get("segments", []):
             segments.append({
@@ -222,7 +230,7 @@ class AudioService:
                 "speaker": "Speaker 1",
                 "duration": seg["end"] - seg["start"]
             })
-        
+
         return {
             "segments": segments,
             "speakers": {"Speaker 1": "Speaker 1"},
@@ -231,6 +239,11 @@ class AudioService:
             "duration": transcription.get("duration", 0),
             "full_text": transcription.get("text", "")
         }
+
+    def _assign_single_speaker(self, transcription: Dict[str, Any]) -> Dict[str, Any]:
+        """Assign all transcription to a single speaker when diarization fails"""
+        # Delegate to the public method
+        return self.format_transcription_only(transcription)
     
     def _create_empty_result(self) -> Dict[str, Any]:
         """Create an empty result structure"""

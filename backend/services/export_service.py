@@ -65,20 +65,35 @@ class ExportService:
         title = doc.add_heading("Transcription Report", level=0)
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
+        # Check if this is transcription-only mode (single speaker named "Speaker 1")
+        is_transcription_only = (
+            data.get('num_speakers', 0) == 1 and
+            list(data.get('speakers', {}).values()) == ["Speaker 1"]
+        )
+
         # Add metadata section
         doc.add_heading("Metadata", level=1)
 
-        metadata_table = doc.add_table(rows=5, cols=2)
-        metadata_table.style = 'Light Grid Accent 1'
-
-        # Populate metadata
-        metadata_rows = [
-            ("Export Date", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-            ("Duration", f"{data.get('duration', 0):.2f} seconds"),
-            ("Number of Speakers", str(data.get('num_speakers', 0))),
-            ("Language", data.get('language', 'Unknown').upper()),
-            ("Total Segments", str(len(data.get('segments', []))))
-        ]
+        # Adjust metadata rows based on mode
+        if is_transcription_only:
+            metadata_table = doc.add_table(rows=4, cols=2)
+            metadata_table.style = 'Light Grid Accent 1'
+            metadata_rows = [
+                ("Export Date", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                ("Duration", f"{data.get('duration', 0):.2f} seconds"),
+                ("Language", data.get('language', 'Unknown').upper()),
+                ("Total Segments", str(len(data.get('segments', []))))
+            ]
+        else:
+            metadata_table = doc.add_table(rows=5, cols=2)
+            metadata_table.style = 'Light Grid Accent 1'
+            metadata_rows = [
+                ("Export Date", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                ("Duration", f"{data.get('duration', 0):.2f} seconds"),
+                ("Number of Speakers", str(data.get('num_speakers', 0))),
+                ("Language", data.get('language', 'Unknown').upper()),
+                ("Total Segments", str(len(data.get('segments', []))))
+            ]
 
         for i, (key, value) in enumerate(metadata_rows):
             metadata_table.rows[i].cells[0].text = key
@@ -96,33 +111,42 @@ class ExportService:
         if not segments:
             doc.add_paragraph("No transcription segments available.")
         else:
-            for segment in segments:
-                # Create speaker header
-                speaker = segment.get('speaker', 'Unknown Speaker')
-                start_time = segment.get('start', 0)
-                end_time = segment.get('end', 0)
+            if is_transcription_only:
+                # Transcription-only mode: Just show text without speaker/timestamp
+                for segment in segments:
+                    text = segment.get('text', '').strip()
+                    text_para = doc.add_paragraph(text)
+                    # No extra spacing - use default paragraph spacing
+                    text_para.paragraph_format.space_after = Pt(0)
+            else:
+                # Standard mode: Show speaker and timestamp
+                for segment in segments:
+                    # Create speaker header
+                    speaker = segment.get('speaker', 'Unknown Speaker')
+                    start_time = segment.get('start', 0)
+                    end_time = segment.get('end', 0)
 
-                # Format timestamp as MM:SS
-                start_str = self._format_timestamp(start_time)
-                end_str = self._format_timestamp(end_time)
+                    # Format timestamp as MM:SS
+                    start_str = self._format_timestamp(start_time)
+                    end_str = self._format_timestamp(end_time)
 
-                # Add speaker and timestamp
-                speaker_para = doc.add_paragraph()
-                speaker_run = speaker_para.add_run(f"{speaker}")
-                speaker_run.bold = True
-                speaker_run.font.size = Pt(11)
-                speaker_run.font.color.rgb = RGBColor(0, 70, 140)
+                    # Add speaker and timestamp
+                    speaker_para = doc.add_paragraph()
+                    speaker_run = speaker_para.add_run(f"{speaker}")
+                    speaker_run.bold = True
+                    speaker_run.font.size = Pt(11)
+                    speaker_run.font.color.rgb = RGBColor(0, 70, 140)
 
-                timestamp_run = speaker_para.add_run(f"  [{start_str} - {end_str}]")
-                timestamp_run.font.size = Pt(10)
-                timestamp_run.font.color.rgb = RGBColor(100, 100, 100)
-                timestamp_run.italic = True
+                    timestamp_run = speaker_para.add_run(f"  [{start_str} - {end_str}]")
+                    timestamp_run.font.size = Pt(10)
+                    timestamp_run.font.color.rgb = RGBColor(100, 100, 100)
+                    timestamp_run.italic = True
 
-                # Add transcription text
-                text = segment.get('text', '').strip()
-                text_para = doc.add_paragraph(text)
-                text_para.paragraph_format.left_indent = Inches(0.25)
-                text_para.paragraph_format.space_after = Pt(12)
+                    # Add transcription text
+                    text = segment.get('text', '').strip()
+                    text_para = doc.add_paragraph(text)
+                    text_para.paragraph_format.left_indent = Inches(0.25)
+                    text_para.paragraph_format.space_after = Pt(12)
 
         # Add footer
         doc.add_paragraph()
@@ -195,44 +219,64 @@ class ExportService:
         if transcription_marker_found and transcription_insert_index is not None:
             segments = data.get('segments', [])
 
+            # Check if this is transcription-only mode
+            is_transcription_only = (
+                data.get('num_speakers', 0) == 1 and
+                list(data.get('speakers', {}).values()) == ["Speaker 1"]
+            )
+
             # Insert segments at the marker position
             for segment in segments:
-                speaker = segment.get('speaker', 'Unknown Speaker')
-                start_time = segment.get('start', 0)
-                end_time = segment.get('end', 0)
-                start_str = self._format_timestamp(start_time)
-                end_str = self._format_timestamp(end_time)
                 text = segment.get('text', '').strip()
 
-                # Insert speaker paragraph at index
-                speaker_para = doc.paragraphs[transcription_insert_index]._element
-                new_speaker_para = doc.add_paragraph()
-                doc._element.body.insert(transcription_insert_index, new_speaker_para._element)
+                if is_transcription_only:
+                    # Transcription-only mode: Just insert text without speaker/timestamp
+                    text_para = doc.add_paragraph()
+                    doc._element.body.insert(transcription_insert_index, text_para._element)
 
-                # Format speaker paragraph
-                new_speaker_para = doc.paragraphs[transcription_insert_index]
-                speaker_run = new_speaker_para.add_run(f"{speaker}")
-                speaker_run.bold = True
-                speaker_run.font.size = Pt(11)
-                speaker_run.font.color.rgb = RGBColor(0, 70, 140)
+                    text_para = doc.paragraphs[transcription_insert_index]
+                    text_para.add_run(text)
+                    # No extra spacing - use default paragraph spacing
+                    text_para.paragraph_format.space_after = Pt(0)
 
-                timestamp_run = new_speaker_para.add_run(f"  [{start_str} - {end_str}]")
-                timestamp_run.font.size = Pt(10)
-                timestamp_run.font.color.rgb = RGBColor(100, 100, 100)
-                timestamp_run.italic = True
+                    transcription_insert_index += 1
+                else:
+                    # Standard mode: Insert speaker, timestamp, and text
+                    speaker = segment.get('speaker', 'Unknown Speaker')
+                    start_time = segment.get('start', 0)
+                    end_time = segment.get('end', 0)
+                    start_str = self._format_timestamp(start_time)
+                    end_str = self._format_timestamp(end_time)
 
-                transcription_insert_index += 1
+                    # Insert speaker paragraph at index
+                    speaker_para = doc.paragraphs[transcription_insert_index]._element
+                    new_speaker_para = doc.add_paragraph()
+                    doc._element.body.insert(transcription_insert_index, new_speaker_para._element)
 
-                # Insert text paragraph
-                text_para = doc.add_paragraph()
-                doc._element.body.insert(transcription_insert_index, text_para._element)
+                    # Format speaker paragraph
+                    new_speaker_para = doc.paragraphs[transcription_insert_index]
+                    speaker_run = new_speaker_para.add_run(f"{speaker}")
+                    speaker_run.bold = True
+                    speaker_run.font.size = Pt(11)
+                    speaker_run.font.color.rgb = RGBColor(0, 70, 140)
 
-                text_para = doc.paragraphs[transcription_insert_index]
-                text_para.add_run(text)
-                text_para.paragraph_format.left_indent = Inches(0.25)
-                text_para.paragraph_format.space_after = Pt(12)
+                    timestamp_run = new_speaker_para.add_run(f"  [{start_str} - {end_str}]")
+                    timestamp_run.font.size = Pt(10)
+                    timestamp_run.font.color.rgb = RGBColor(100, 100, 100)
+                    timestamp_run.italic = True
 
-                transcription_insert_index += 1
+                    transcription_insert_index += 1
+
+                    # Insert text paragraph
+                    text_para = doc.add_paragraph()
+                    doc._element.body.insert(transcription_insert_index, text_para._element)
+
+                    text_para = doc.paragraphs[transcription_insert_index]
+                    text_para.add_run(text)
+                    text_para.paragraph_format.left_indent = Inches(0.25)
+                    text_para.paragraph_format.space_after = Pt(12)
+
+                    transcription_insert_index += 1
 
         return doc
 
