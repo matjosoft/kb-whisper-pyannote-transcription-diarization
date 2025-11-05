@@ -313,20 +313,18 @@ class ExportService:
             # Build the text content
             lines = []
 
-            # Add header with metadata
-            lines.append("=" * 60)
-            lines.append("TRANSCRIPTION REPORT")
-            lines.append("=" * 60)
-            lines.append(f"Export Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            lines.append(f"Duration: {transcription_data.get('duration', 0):.2f} seconds")
-            lines.append(f"Language: {transcription_data.get('language', 'Unknown').upper()}")
-
+            # Only add header with metadata if speakers are included
             if include_speakers:
+                lines.append("=" * 60)
+                lines.append("TRANSCRIPTION REPORT")
+                lines.append("=" * 60)
+                lines.append(f"Export Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                lines.append(f"Duration: {transcription_data.get('duration', 0):.2f} seconds")
+                lines.append(f"Language: {transcription_data.get('language', 'Unknown').upper()}")
                 lines.append(f"Number of Speakers: {transcription_data.get('num_speakers', 0)}")
-
-            lines.append(f"Total Segments: {len(transcription_data.get('segments', []))}")
-            lines.append("=" * 60)
-            lines.append("")
+                lines.append(f"Total Segments: {len(transcription_data.get('segments', []))}")
+                lines.append("=" * 60)
+                lines.append("")
 
             # Add transcription content
             segments = transcription_data.get('segments', [])
