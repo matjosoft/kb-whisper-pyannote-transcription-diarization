@@ -471,6 +471,46 @@ async def export_to_word(request: Request):
         logger.error(f"Word export failed: {e}")
         raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
 
+@app.post("/api/export/txt")
+async def export_to_txt(request: Request):
+    """Export transcription results to plain text file"""
+    try:
+        data = await request.json()
+        transcription_data = data.get("transcription_data")
+        include_speakers = data.get("include_speakers", True)  # Default to True
+
+        if not transcription_data:
+            raise HTTPException(status_code=400, detail="No transcription data provided")
+
+        # Create temporary output path
+        output_dir = Path("exports")
+        output_dir.mkdir(exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_filename = f"transcription_{timestamp}.txt"
+        output_path = output_dir / output_filename
+
+        # Generate text file
+        result_path = export_service.export_to_txt(
+            transcription_data=transcription_data,
+            include_speakers=include_speakers,
+            output_path=output_path
+        )
+
+        # Return the file as a download
+        return FileResponse(
+            path=str(result_path),
+            filename=output_filename,
+            media_type="text/plain",
+            headers={
+                "Content-Disposition": f"attachment; filename={output_filename}"
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"TXT export failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
+
 @app.get("/api/export/templates")
 async def get_available_templates():
     """Get list of available Word templates"""

@@ -170,6 +170,16 @@ body {
     accent-color: var(--color-primary);
 }
 
+.toggle-checkbox:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+}
+
+.toggle-label:has(.toggle-checkbox:disabled) {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
 .toggle-text {
     font-weight: 600;
     font-size: 1rem;
@@ -652,6 +662,25 @@ body {
 .action-btn:disabled:hover {
     transform: none;
     box-shadow: none;
+}
+
+/* Export Options */
+.export-options {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 15px;
+    padding: 25px;
+    margin-bottom: 30px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.export-options h3 {
+    margin-bottom: 15px;
+    color: #00d4ff;
+    font-size: 1.2rem;
+}
+
+.export-option {
+    margin-bottom: var(--spacing-md);
 }
 
 /* Speaker Editor */

@@ -37,14 +37,17 @@ class AudioScribeApp {
         this.speakerInputs = document.getElementById('speakerInputs');
         this.transcriptionDisplay = document.getElementById('transcriptionDisplay');
         this.exportWordBtn = document.getElementById('exportWordBtn');
+        this.exportTxtBtn = document.getElementById('exportTxtBtn');
         this.exportJsonBtn = document.getElementById('exportJsonBtn');
         this.clearBtn = document.getElementById('clearBtn');
+        this.includeSpeakersToggle = document.getElementById('includeSpeakersToggle');
     }
 
     setupEventListeners() {
         // Transcription-only toggle
         this.transcriptionOnlyToggle.addEventListener('change', (e) => {
             this.transcriptionOnlyMode = e.target.checked;
+            this.updateSpeakerCheckboxState();
         });
 
         // Recording button
@@ -62,8 +65,21 @@ class AudioScribeApp {
 
         // Action buttons
         this.exportWordBtn.addEventListener('click', () => this.exportToWord());
+        this.exportTxtBtn.addEventListener('click', () => this.exportToTxt());
         this.exportJsonBtn.addEventListener('click', () => this.exportToJSON());
         this.clearBtn.addEventListener('click', () => this.clearResults());
+    }
+
+    updateSpeakerCheckboxState() {
+        if (this.transcriptionOnlyMode) {
+            // Disable and uncheck when in transcription-only mode
+            this.includeSpeakersToggle.checked = false;
+            this.includeSpeakersToggle.disabled = true;
+        } else {
+            // Enable and check when not in transcription-only mode
+            this.includeSpeakersToggle.disabled = false;
+            this.includeSpeakersToggle.checked = true;
+        }
     }
 
     async initializeRecorder() {
@@ -528,15 +544,18 @@ class AudioScribeApp {
     displayResults(results) {
         this.currentResults = results;
         this.speakerNames = { ...results.speakers };
-        
+
         this.createSpeakerEditor(results.speakers);
         this.displayTranscription(results.segments);
-        
+
         // Load results into karaoke player
         if (this.karaokePlayer && this.currentResults) {
             this.karaokePlayer.loadTranscriptionResults(this.currentResults, this.currentAudioFile);
         }
-        
+
+        // Update speaker checkbox state based on transcription-only mode
+        this.updateSpeakerCheckboxState();
+
         this.resultsSection.classList.remove('hidden');
     }
 
@@ -718,6 +737,76 @@ class AudioScribeApp {
         }
     }
 
+    async exportToTxt() {
+        if (!this.currentResults) {
+            window.toast.warning('No Results', 'Please transcribe audio before exporting');
+            return;
+        }
+
+        try {
+            // Get include speakers preference
+            const includeSpeakers = this.includeSpeakersToggle.checked;
+
+            // Prepare export data with updated speaker names
+            const exportData = {
+                ...this.currentResults,
+                segments: this.currentResults.segments.map(segment => ({
+                    ...segment,
+                    speaker: this.speakerNames[segment.speaker] || segment.speaker
+                }))
+            };
+
+            // Show loading state
+            this.exportTxtBtn.disabled = true;
+            this.exportTxtBtn.innerHTML = '<span>⏳</span> Exporting...';
+
+            // Send request to backend
+            const response = await fetch('/api/export/txt', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    transcription_data: exportData,
+                    include_speakers: includeSpeakers
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Export failed: ${response.statusText}`);
+            }
+
+            // Get the blob from response
+            const blob = await response.blob();
+
+            // Create download link
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `transcription_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.txt`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // Clean up
+            window.URL.revokeObjectURL(url);
+
+            // Reset button
+            this.exportTxtBtn.disabled = false;
+            this.exportTxtBtn.innerHTML = '<span>📄</span> Export to TXT';
+
+            window.toast.success('Export Complete', 'TXT file has been downloaded successfully');
+
+        } catch (error) {
+            console.error('TXT export failed:', error);
+            window.toast.error('Export Failed', error.message);
+
+            // Reset button on error
+            this.exportTxtBtn.disabled = false;
+            this.exportTxtBtn.innerHTML = '<span>📄</span> Export to TXT';
+        }
+    }
+
     clearResults() {
         this.currentResults = null;
         this.speakerNames = {};
@@ -725,7 +814,7 @@ class AudioScribeApp {
         this.resultsSection.classList.add('hidden');
         this.recordingInfo.classList.add('hidden');
         this.fileInput.value = '';
-        
+
         // Clean up karaoke player
         if (this.karaokePlayer) {
             this.karaokePlayer.destroy();
