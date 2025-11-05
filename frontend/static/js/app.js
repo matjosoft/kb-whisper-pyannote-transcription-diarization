@@ -47,6 +47,7 @@ class AudioScribeApp {
         // Transcription-only toggle
         this.transcriptionOnlyToggle.addEventListener('change', (e) => {
             this.transcriptionOnlyMode = e.target.checked;
+            this.updateSpeakerCheckboxState();
         });
 
         // Recording button
@@ -67,6 +68,18 @@ class AudioScribeApp {
         this.exportTxtBtn.addEventListener('click', () => this.exportToTxt());
         this.exportJsonBtn.addEventListener('click', () => this.exportToJSON());
         this.clearBtn.addEventListener('click', () => this.clearResults());
+    }
+
+    updateSpeakerCheckboxState() {
+        if (this.transcriptionOnlyMode) {
+            // Disable and uncheck when in transcription-only mode
+            this.includeSpeakersToggle.checked = false;
+            this.includeSpeakersToggle.disabled = true;
+        } else {
+            // Enable and check when not in transcription-only mode
+            this.includeSpeakersToggle.disabled = false;
+            this.includeSpeakersToggle.checked = true;
+        }
     }
 
     async initializeRecorder() {
@@ -531,15 +544,18 @@ class AudioScribeApp {
     displayResults(results) {
         this.currentResults = results;
         this.speakerNames = { ...results.speakers };
-        
+
         this.createSpeakerEditor(results.speakers);
         this.displayTranscription(results.segments);
-        
+
         // Load results into karaoke player
         if (this.karaokePlayer && this.currentResults) {
             this.karaokePlayer.loadTranscriptionResults(this.currentResults, this.currentAudioFile);
         }
-        
+
+        // Update speaker checkbox state based on transcription-only mode
+        this.updateSpeakerCheckboxState();
+
         this.resultsSection.classList.remove('hidden');
     }
 

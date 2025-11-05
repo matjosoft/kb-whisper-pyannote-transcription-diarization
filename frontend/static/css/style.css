@@ -170,6 +170,16 @@ body {
     accent-color: var(--color-primary);
 }
 
+.toggle-checkbox:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+}
+
+.toggle-label:has(.toggle-checkbox:disabled) {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
 .toggle-text {
     font-weight: 600;
     font-size: 1rem;
