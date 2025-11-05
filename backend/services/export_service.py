@@ -292,6 +292,76 @@ class ExportService:
         else:
             return f"{minutes:02d}:{secs:02d}"
 
+    def export_to_txt(
+        self,
+        transcription_data: Dict[str, Any],
+        include_speakers: bool = True,
+        output_path: Optional[Path] = None
+    ) -> Path:
+        """
+        Export transcription results to a plain text file
+
+        Args:
+            transcription_data: Transcription results with segments and speaker info
+            include_speakers: Whether to include speaker names in the output
+            output_path: Optional output path for the generated file
+
+        Returns:
+            Path to the generated text file
+        """
+        try:
+            # Build the text content
+            lines = []
+
+            # Add header with metadata
+            lines.append("=" * 60)
+            lines.append("TRANSCRIPTION REPORT")
+            lines.append("=" * 60)
+            lines.append(f"Export Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            lines.append(f"Duration: {transcription_data.get('duration', 0):.2f} seconds")
+            lines.append(f"Language: {transcription_data.get('language', 'Unknown').upper()}")
+
+            if include_speakers:
+                lines.append(f"Number of Speakers: {transcription_data.get('num_speakers', 0)}")
+
+            lines.append(f"Total Segments: {len(transcription_data.get('segments', []))}")
+            lines.append("=" * 60)
+            lines.append("")
+
+            # Add transcription content
+            segments = transcription_data.get('segments', [])
+
+            for segment in segments:
+                text = segment.get('text', '').strip()
+
+                if include_speakers:
+                    speaker = segment.get('speaker', 'Unknown')
+                    start_time = self._format_timestamp(segment.get('start', 0))
+                    end_time = self._format_timestamp(segment.get('end', 0))
+                    lines.append(f"{speaker} [{start_time} - {end_time}]:")
+                    lines.append(f"  {text}")
+                    lines.append("")
+                else:
+                    lines.append(text)
+
+            # Join all lines
+            content = "\n".join(lines)
+
+            # Generate output path if not provided
+            if not output_path:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                output_path = Path(f"transcription_{timestamp}.txt")
+
+            # Write to file
+            output_path.write_text(content, encoding='utf-8')
+            logger.info(f"Text file saved to: {output_path}")
+
+            return output_path
+
+        except Exception as e:
+            logger.error(f"Failed to export to TXT: {e}")
+            raise RuntimeError(f"TXT export failed: {str(e)}")
+
     def get_available_templates(self) -> list[Path]:
         """Get list of available Word templates"""
         if not self.templates_dir.exists():

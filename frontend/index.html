@@ -109,12 +109,27 @@
                         <button id="exportWordBtn" class="action-btn export-btn">
                             <span>📝</span> Export to Word
                         </button>
+                        <button id="exportTxtBtn" class="action-btn export-btn">
+                            <span>📄</span> Export to TXT
+                        </button>
                         <button id="exportJsonBtn" class="action-btn export-btn">
                             <span>📤</span> Export JSON
                         </button>
                         <button id="clearBtn" class="action-btn clear-btn">
                             <span>🗑️</span> Clear
                         </button>
+                    </div>
+                </div>
+
+                <!-- Export Options -->
+                <div class="export-options" id="exportOptions">
+                    <h3>📋 TXT Export Options</h3>
+                    <div class="export-option">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="includeSpeakersToggle" class="toggle-checkbox" checked>
+                            <span class="toggle-text">Include Speaker Names in TXT Export</span>
+                        </label>
+                        <p class="option-description">When enabled, the exported text file will include speaker names. Disable for plain text only.</p>
                     </div>
                 </div>
 
