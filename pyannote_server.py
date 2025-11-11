@@ -100,7 +100,7 @@ class PyannoteServer:
             # Load the pre-trained pipeline
             self.pipeline = Pipeline.from_pretrained(
                 self.model_name,
-                use_auth_token=self.hf_auth_token
+                token=self.hf_auth_token
             )
 
             # Move to appropriate device
