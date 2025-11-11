@@ -141,14 +141,42 @@ class PyannoteService:
             speakers = set()
             segments = []
 
-            for turn, _, speaker in diarization.itertracks(yield_label=True):
-                speakers.add(speaker)
-                segments.append({
-                    "start": turn.start,
-                    "end": turn.end,
-                    "speaker": speaker,
-                    "duration": turn.end - turn.start
-                })
+            # Handle both old and new pyannote.audio API
+            if hasattr(diarization, 'itertracks'):
+                # Old API (pyannote.audio < 3.0) - Annotation object
+                for turn, _, speaker in diarization.itertracks(yield_label=True):
+                    speakers.add(speaker)
+                    segments.append({
+                        "start": turn.start,
+                        "end": turn.end,
+                        "speaker": speaker,
+                        "duration": turn.end - turn.start
+                    })
+            elif hasattr(diarization, 'segments'):
+                # New API - has a segments attribute
+                for segment in diarization.segments:
+                    speaker = segment.speaker
+                    speakers.add(speaker)
+                    segments.append({
+                        "start": segment.start,
+                        "end": segment.end,
+                        "speaker": speaker,
+                        "duration": segment.end - segment.start
+                    })
+            elif hasattr(diarization, '__iter__'):
+                # Try direct iteration
+                for item in diarization:
+                    if hasattr(item, 'start') and hasattr(item, 'end'):
+                        speaker = getattr(item, 'speaker', getattr(item, 'label', 'UNKNOWN'))
+                        speakers.add(speaker)
+                        segments.append({
+                            "start": item.start,
+                            "end": item.end,
+                            "speaker": speaker,
+                            "duration": item.end - item.start
+                        })
+            else:
+                raise RuntimeError(f"Unknown diarization output format: {type(diarization)}")
 
             # Sort segments by start time
             segments.sort(key=lambda x: x["start"])

@@ -141,18 +141,56 @@ class PyannoteServer:
             # Apply the pipeline to the audio file
             diarization = self.pipeline(audio_path)
 
+            # Debug: Log the type and attributes of diarization object
+            logger.info(f"Diarization type: {type(diarization)}")
+            logger.info(f"Diarization dir: {[attr for attr in dir(diarization) if not attr.startswith('_')]}")
+
             # Process the diarization results
             speakers = set()
             segments = []
 
-            for turn, _, speaker in diarization.itertracks(yield_label=True):
-                speakers.add(speaker)
-                segments.append({
-                    "start": turn.start,
-                    "end": turn.end,
-                    "speaker": speaker,
-                    "duration": turn.end - turn.start
-                })
+            # Handle both old and new pyannote.audio API
+            if hasattr(diarization, 'itertracks'):
+                # Old API (pyannote.audio < 3.0) - Annotation object
+                logger.debug("Using old API (itertracks)")
+                for turn, _, speaker in diarization.itertracks(yield_label=True):
+                    speakers.add(speaker)
+                    segments.append({
+                        "start": turn.start,
+                        "end": turn.end,
+                        "speaker": speaker,
+                        "duration": turn.end - turn.start
+                    })
+            elif hasattr(diarization, 'segments'):
+                # New API - likely has a segments list or iterator
+                logger.debug("Using new API (segments attribute)")
+                for segment in diarization.segments:
+                    speaker = segment.speaker
+                    speakers.add(speaker)
+                    segments.append({
+                        "start": segment.start,
+                        "end": segment.end,
+                        "speaker": speaker,
+                        "duration": segment.end - segment.start
+                    })
+            elif hasattr(diarization, '__iter__'):
+                # Try direct iteration
+                logger.debug("Using direct iteration")
+                for item in diarization:
+                    # Check if it's a segment-like object
+                    if hasattr(item, 'start') and hasattr(item, 'end'):
+                        speaker = getattr(item, 'speaker', getattr(item, 'label', 'UNKNOWN'))
+                        speakers.add(speaker)
+                        segments.append({
+                            "start": item.start,
+                            "end": item.end,
+                            "speaker": speaker,
+                            "duration": item.end - item.start
+                        })
+                    else:
+                        logger.warning(f"Unknown segment format: {type(item)}, {item}")
+            else:
+                raise RuntimeError(f"Unknown diarization output format: {type(diarization)}")
 
             # Sort segments by start time
             segments.sort(key=lambda x: x["start"])
