@@ -49,6 +49,8 @@ class Settings:
         
         # Pyannote settings
         self.pyannote_model = os.getenv("PYANNOTE_MODEL", "pyannote/speaker-diarization-3.1")
+        self.pyannote_use_remote = os.getenv("PYANNOTE_USE_REMOTE", "false").lower() == "true"
+        self.pyannote_remote_url = os.getenv("PYANNOTE_REMOTE_URL", "http://localhost:8001")
         self.min_speakers = int(os.getenv("MIN_SPEAKERS", 1))
         self.max_speakers = int(os.getenv("MAX_SPEAKERS", 10))
         
