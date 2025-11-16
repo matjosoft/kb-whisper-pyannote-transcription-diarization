@@ -29,9 +29,13 @@ class TranscriptEditor {
         // Speaker manager
         this.speakerManager = null;
 
+        // Timestamp editor
+        this.timestampEditor = null;
+
         this.initializeElements();
         this.setupEventListeners();
         this.initializeSpeakerManager();
+        this.initializeTimestampEditor();
     }
 
     initializeElements() {
@@ -84,6 +88,23 @@ class TranscriptEditor {
             }
         } catch (error) {
             console.error('Failed to initialize speaker manager:', error);
+        }
+    }
+
+    /**
+     * Initialize timestamp editor
+     */
+    initializeTimestampEditor() {
+        try {
+            if (typeof TimestampEditor !== 'undefined') {
+                this.timestampEditor = new TimestampEditor(this);
+                this.timestampEditor.init();
+                console.log('Timestamp editor initialized');
+            } else {
+                console.warn('TimestampEditor not available');
+            }
+        } catch (error) {
+            console.error('Failed to initialize timestamp editor:', error);
         }
     }
 
@@ -251,6 +272,14 @@ class TranscriptEditor {
         const timeStamp = document.createElement('span');
         timeStamp.className = 'segment-time';
         timeStamp.textContent = `[${this.app.formatTime(segment.start)} - ${this.app.formatTime(segment.end)}]`;
+        timeStamp.dataset.segmentId = segment.id;
+
+        // Make timestamp clickable
+        timeStamp.addEventListener('click', () => {
+            if (this.timestampEditor) {
+                this.timestampEditor.show(segment.id);
+            }
+        });
 
         header.appendChild(timeStamp);
 
