@@ -23,6 +23,9 @@ class TranscriptEditor {
         this.nextSegmentId = 1;
         this.nextSpeakerId = 1;
 
+        // Segment editors (map of segmentId -> SegmentEditor)
+        this.segmentEditors = new Map();
+
         this.initializeElements();
         this.setupEventListeners();
     }
@@ -153,6 +156,10 @@ class TranscriptEditor {
             }
         }
 
+        // Disable and destroy all segment editors
+        this.segmentEditors.forEach(editor => editor.destroy());
+        this.segmentEditors.clear();
+
         // Remove edit-mode class
         const transcriptionDisplay = document.getElementById('transcriptionDisplay');
         if (transcriptionDisplay) {
@@ -175,9 +182,20 @@ class TranscriptEditor {
 
         transcriptionDisplay.innerHTML = '';
 
+        // Clear existing segment editors
+        this.segmentEditors.forEach(editor => editor.destroy());
+        this.segmentEditors.clear();
+
         this.segments.forEach((segment, index) => {
             const segmentElement = this.createEditableSegment(segment, index);
             transcriptionDisplay.appendChild(segmentElement);
+
+            // Create and initialize segment editor if SegmentEditor is available
+            if (typeof SegmentEditor !== 'undefined') {
+                const segmentEditor = new SegmentEditor(segment.id, this);
+                segmentEditor.init(segmentElement);
+                this.segmentEditors.set(segment.id, segmentEditor);
+            }
         });
     }
 
