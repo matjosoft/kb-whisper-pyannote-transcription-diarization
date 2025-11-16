@@ -561,14 +561,15 @@ class AudioScribeApp {
 
     createSpeakerEditor(speakers) {
         this.speakerInputs.innerHTML = '';
-        
+
         Object.keys(speakers).forEach(speakerId => {
             const inputGroup = document.createElement('div');
             inputGroup.className = 'speaker-input-group';
-            
+            inputGroup.dataset.speakerId = speakerId;
+
             const label = document.createElement('label');
             label.textContent = speakerId + ':';
-            
+
             const input = document.createElement('input');
             input.type = 'text';
             input.value = speakers[speakerId];
@@ -577,40 +578,68 @@ class AudioScribeApp {
                 this.speakerNames[speakerId] = e.target.value || speakerId;
                 this.updateTranscriptionDisplay();
             });
-            
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'btn btn-sm btn-danger speaker-remove-btn';
+            removeBtn.innerHTML = '×';
+            removeBtn.title = 'Remove speaker';
+            removeBtn.onclick = () => this.removeSpeaker(speakerId);
+
             inputGroup.appendChild(label);
             inputGroup.appendChild(input);
+            inputGroup.appendChild(removeBtn);
             this.speakerInputs.appendChild(inputGroup);
         });
+
+        // Add "Add Speaker" button
+        const addSpeakerBtn = document.createElement('button');
+        addSpeakerBtn.className = 'btn btn-secondary add-speaker-btn';
+        addSpeakerBtn.textContent = '+ Add Speaker';
+        addSpeakerBtn.onclick = () => this.addSpeaker();
+        this.speakerInputs.appendChild(addSpeakerBtn);
     }
 
     displayTranscription(segments) {
         this.transcriptionDisplay.innerHTML = '';
-        
+
         segments.forEach((segment, index) => {
             const segmentDiv = document.createElement('div');
             segmentDiv.className = `transcription-segment ${this.getSpeakerClass(segment.speaker)}`;
-            
+            segmentDiv.dataset.segmentIndex = index;
+
             const header = document.createElement('div');
             header.className = 'segment-header';
-            
+
             const speakerName = document.createElement('span');
             speakerName.className = 'speaker-name';
             speakerName.textContent = this.speakerNames[segment.speaker] || segment.speaker;
-            
+
             const timeStamp = document.createElement('span');
             timeStamp.className = 'segment-time';
             timeStamp.textContent = `[${this.formatTime(segment.start)} - ${this.formatTime(segment.end)}]`;
-            
+
+            // Edit button
+            const editBtn = document.createElement('button');
+            editBtn.className = 'segment-edit-btn';
+            editBtn.innerHTML = '<svg width="14" height="14" fill="currentColor"><path d="M11.013 1.427a1.75 1.75 0 012.474 0l1.086 1.086a1.75 1.75 0 010 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 01-.927-.928l.929-3.25a1.75 1.75 0 01.445-.758l8.61-8.61zm1.414 1.06a.25.25 0 00-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 000-.354l-1.086-1.086zM11.189 6.25L9.75 4.81l-6.286 6.287a.25.25 0 00-.064.108l-.558 1.953 1.953-.558a.249.249 0 00.108-.064l6.286-6.286z"/></svg>';
+            editBtn.title = 'Edit segment';
+            editBtn.onclick = () => this.toggleSegmentEdit(index);
+
             header.appendChild(speakerName);
             header.appendChild(timeStamp);
-            
+            header.appendChild(editBtn);
+
             const text = document.createElement('div');
             text.className = 'segment-text';
             text.textContent = segment.text;
-            
+
+            // Edit form (hidden by default)
+            const editForm = this.createSegmentEditForm(segment, index);
+            editForm.className = 'segment-edit-form hidden';
+
             segmentDiv.appendChild(header);
             segmentDiv.appendChild(text);
+            segmentDiv.appendChild(editForm);
             this.transcriptionDisplay.appendChild(segmentDiv);
         });
     }
@@ -625,6 +654,23 @@ class AudioScribeApp {
             if (speakerId) {
                 element.textContent = this.speakerNames[speakerId] || speakerId;
             }
+        });
+
+        // Update speaker dropdowns in edit forms
+        const speakerSelects = this.transcriptionDisplay.querySelectorAll('.edit-speaker-select');
+        speakerSelects.forEach(select => {
+            const currentValue = select.value;
+            select.innerHTML = '';
+
+            Object.keys(this.speakerNames).forEach(speakerId => {
+                const option = document.createElement('option');
+                option.value = speakerId;
+                option.textContent = this.speakerNames[speakerId] || speakerId;
+                if (speakerId === currentValue) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
         });
 
         // Update karaoke player with new speaker names
@@ -642,6 +688,294 @@ class AudioScribeApp {
         const minutes = Math.floor(seconds / 60);
         const remainingSeconds = Math.floor(seconds % 60);
         return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}.${Math.floor((seconds % 1) * 1000).toString().padStart(3, '0')}`;
+    }
+
+    parseTime(timeString) {
+        // Parse MM:SS.mmm format to seconds
+        const parts = timeString.split(':');
+        if (parts.length !== 2) return null;
+
+        const minutes = parseInt(parts[0], 10);
+        const secondsParts = parts[1].split('.');
+        const seconds = parseInt(secondsParts[0], 10);
+        const milliseconds = secondsParts.length > 1 ? parseInt(secondsParts[1].padEnd(3, '0'), 10) : 0;
+
+        if (isNaN(minutes) || isNaN(seconds) || isNaN(milliseconds)) return null;
+
+        return minutes * 60 + seconds + milliseconds / 1000;
+    }
+
+    createSegmentEditForm(segment, index) {
+        const form = document.createElement('div');
+
+        // Speaker selection
+        const speakerGroup = document.createElement('div');
+        speakerGroup.className = 'edit-field-group';
+
+        const speakerLabel = document.createElement('label');
+        speakerLabel.textContent = 'Speaker:';
+        speakerLabel.className = 'edit-field-label';
+
+        const speakerSelect = document.createElement('select');
+        speakerSelect.className = 'edit-speaker-select';
+
+        // Populate speaker options
+        const speakers = Object.keys(this.speakerNames);
+        speakers.forEach(speakerId => {
+            const option = document.createElement('option');
+            option.value = speakerId;
+            option.textContent = this.speakerNames[speakerId] || speakerId;
+            if (speakerId === segment.speaker) {
+                option.selected = true;
+            }
+            speakerSelect.appendChild(option);
+        });
+
+        speakerGroup.appendChild(speakerLabel);
+        speakerGroup.appendChild(speakerSelect);
+
+        // Time controls
+        const timeGroup = document.createElement('div');
+        timeGroup.className = 'edit-field-group edit-time-group';
+
+        const startTimeLabel = document.createElement('label');
+        startTimeLabel.textContent = 'Start:';
+        startTimeLabel.className = 'edit-field-label';
+
+        const startTimeInput = document.createElement('input');
+        startTimeInput.type = 'text';
+        startTimeInput.className = 'edit-time-input';
+        startTimeInput.value = this.formatTime(segment.start);
+        startTimeInput.placeholder = 'MM:SS.mmm';
+
+        const endTimeLabel = document.createElement('label');
+        endTimeLabel.textContent = 'End:';
+        endTimeLabel.className = 'edit-field-label';
+
+        const endTimeInput = document.createElement('input');
+        endTimeInput.type = 'text';
+        endTimeInput.className = 'edit-time-input';
+        endTimeInput.value = this.formatTime(segment.end);
+        endTimeInput.placeholder = 'MM:SS.mmm';
+
+        timeGroup.appendChild(startTimeLabel);
+        timeGroup.appendChild(startTimeInput);
+        timeGroup.appendChild(endTimeLabel);
+        timeGroup.appendChild(endTimeInput);
+
+        // Text editing
+        const textGroup = document.createElement('div');
+        textGroup.className = 'edit-field-group';
+
+        const textLabel = document.createElement('label');
+        textLabel.textContent = 'Text:';
+        textLabel.className = 'edit-field-label';
+
+        const textArea = document.createElement('textarea');
+        textArea.className = 'edit-text-area';
+        textArea.value = segment.text;
+        textArea.rows = 3;
+
+        textGroup.appendChild(textLabel);
+        textGroup.appendChild(textArea);
+
+        // Action buttons
+        const buttonGroup = document.createElement('div');
+        buttonGroup.className = 'edit-button-group';
+
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'btn btn-primary edit-save-btn';
+        saveBtn.textContent = 'Save';
+        saveBtn.onclick = () => this.saveSegmentEdit(index, {
+            speaker: speakerSelect.value,
+            start: startTimeInput.value,
+            end: endTimeInput.value,
+            text: textArea.value
+        });
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'btn btn-secondary edit-cancel-btn';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.onclick = () => this.toggleSegmentEdit(index);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn btn-danger edit-delete-btn';
+        deleteBtn.textContent = 'Delete Segment';
+        deleteBtn.onclick = () => this.deleteSegment(index);
+
+        buttonGroup.appendChild(saveBtn);
+        buttonGroup.appendChild(cancelBtn);
+        buttonGroup.appendChild(deleteBtn);
+
+        form.appendChild(speakerGroup);
+        form.appendChild(timeGroup);
+        form.appendChild(textGroup);
+        form.appendChild(buttonGroup);
+
+        return form;
+    }
+
+    toggleSegmentEdit(index) {
+        const segmentDiv = this.transcriptionDisplay.querySelector(`[data-segment-index="${index}"]`);
+        if (!segmentDiv) return;
+
+        const editForm = segmentDiv.querySelector('.segment-edit-form');
+        const segmentText = segmentDiv.querySelector('.segment-text');
+        const header = segmentDiv.querySelector('.segment-header');
+
+        if (editForm.classList.contains('hidden')) {
+            // Show edit form
+            editForm.classList.remove('hidden');
+            segmentText.classList.add('hidden');
+            header.style.opacity = '0.6';
+        } else {
+            // Hide edit form
+            editForm.classList.add('hidden');
+            segmentText.classList.remove('hidden');
+            header.style.opacity = '1';
+        }
+    }
+
+    saveSegmentEdit(index, editedData) {
+        const segment = this.currentResults.segments[index];
+
+        // Parse and validate times
+        const newStart = this.parseTime(editedData.start);
+        const newEnd = this.parseTime(editedData.end);
+
+        if (newStart === null || newEnd === null) {
+            window.toast.error('Invalid Time Format', 'Please use MM:SS.mmm format');
+            return;
+        }
+
+        if (newStart >= newEnd) {
+            window.toast.error('Invalid Time Range', 'Start time must be before end time');
+            return;
+        }
+
+        // Check against audio duration
+        if (this.currentResults.duration && newEnd > this.currentResults.duration) {
+            window.toast.error('Invalid Time', 'End time exceeds audio duration');
+            return;
+        }
+
+        // Update segment
+        segment.text = editedData.text.trim();
+        segment.speaker = editedData.speaker;
+
+        // Adjust timestamps and update neighbors
+        const timeChanged = segment.start !== newStart || segment.end !== newEnd;
+        if (timeChanged) {
+            const oldStart = segment.start;
+            const oldEnd = segment.end;
+
+            segment.start = newStart;
+            segment.end = newEnd;
+            segment.duration = newEnd - newStart;
+
+            // Adjust neighboring segments
+            this.adjustNeighboringSegments(index, oldStart, oldEnd, newStart, newEnd);
+        }
+
+        // Refresh display
+        this.displayTranscription(this.currentResults.segments);
+
+        // Update karaoke player
+        if (this.karaokePlayer) {
+            this.karaokePlayer.loadTranscriptionResults(this.currentResults, this.currentAudioFile);
+        }
+
+        window.toast.success('Segment Updated', 'Changes saved successfully');
+    }
+
+    adjustNeighboringSegments(currentIndex, oldStart, oldEnd, newStart, newEnd) {
+        const segments = this.currentResults.segments;
+
+        // Adjust previous segment if start time changed
+        if (currentIndex > 0 && newStart !== oldStart) {
+            const prevSegment = segments[currentIndex - 1];
+            if (prevSegment.end > newStart) {
+                // Previous segment overlaps, adjust its end time
+                prevSegment.end = newStart;
+                prevSegment.duration = prevSegment.end - prevSegment.start;
+            }
+        }
+
+        // Adjust next segment if end time changed
+        if (currentIndex < segments.length - 1 && newEnd !== oldEnd) {
+            const nextSegment = segments[currentIndex + 1];
+            if (nextSegment.start < newEnd) {
+                // Next segment overlaps, adjust its start time
+                nextSegment.start = newEnd;
+                nextSegment.duration = nextSegment.end - nextSegment.start;
+            }
+        }
+    }
+
+    deleteSegment(index) {
+        if (!confirm('Are you sure you want to delete this segment?')) {
+            return;
+        }
+
+        this.currentResults.segments.splice(index, 1);
+
+        // Refresh display
+        this.displayTranscription(this.currentResults.segments);
+
+        // Update karaoke player
+        if (this.karaokePlayer) {
+            this.karaokePlayer.loadTranscriptionResults(this.currentResults, this.currentAudioFile);
+        }
+
+        window.toast.success('Segment Deleted', 'Segment removed successfully');
+    }
+
+    addSpeaker() {
+        // Find the next available speaker number
+        const existingSpeakers = Object.keys(this.speakerNames);
+        const speakerNumbers = existingSpeakers
+            .map(id => {
+                const match = id.match(/SPEAKER_(\d+)/);
+                return match ? parseInt(match[1], 10) : -1;
+            })
+            .filter(num => num >= 0);
+
+        const nextNumber = speakerNumbers.length > 0
+            ? Math.max(...speakerNumbers) + 1
+            : existingSpeakers.length;
+
+        const newSpeakerId = `SPEAKER_${nextNumber.toString().padStart(2, '0')}`;
+        const newSpeakerName = `Speaker ${nextNumber + 1}`;
+
+        // Add to speaker names
+        this.speakerNames[newSpeakerId] = newSpeakerName;
+
+        // Update the speaker editor display
+        this.createSpeakerEditor(this.speakerNames);
+
+        window.toast.success('Speaker Added', `${newSpeakerName} created`);
+    }
+
+    removeSpeaker(speakerId) {
+        // Check if any segments use this speaker
+        const usedInSegments = this.currentResults.segments.some(seg => seg.speaker === speakerId);
+
+        if (usedInSegments) {
+            window.toast.error('Cannot Remove Speaker', 'This speaker is used in one or more segments. Reassign those segments first.');
+            return;
+        }
+
+        if (!confirm(`Are you sure you want to remove ${this.speakerNames[speakerId] || speakerId}?`)) {
+            return;
+        }
+
+        // Remove from speaker names
+        delete this.speakerNames[speakerId];
+
+        // Update the speaker editor display
+        this.createSpeakerEditor(this.speakerNames);
+
+        window.toast.success('Speaker Removed', 'Speaker deleted successfully');
     }
 
     exportToJSON() {
