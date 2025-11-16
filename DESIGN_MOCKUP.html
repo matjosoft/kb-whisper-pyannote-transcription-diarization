@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transcript Editor - Design Mockup</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            /* Existing dark mode colors */
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #0f1423;
+            --surface-1: #1a1f35;
+            --surface-2: #252b45;
+            --surface-3: #2d3451;
+            --text-primary: #e5e7eb;
+            --text-secondary: #9ca3af;
+            --text-tertiary: #6b7280;
+
+            /* Edit mode colors */
+            --edit-active: #3b82f6;
+            --edit-modified: #f59e0b;
+            --edit-error: #ef4444;
+            --edit-success: #10b981;
+
+            /* Speaker colors */
+            --speaker-1: #3b82f6;
+            --speaker-2: #10b981;
+            --speaker-3: #f59e0b;
+            --speaker-4: #ec4899;
+            --speaker-5: #8b5cf6;
+            --speaker-6: #06b6d4;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            padding: 40px 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 36px;
+            margin-bottom: 12px;
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            margin-bottom: 40px;
+            font-size: 18px;
+        }
+
+        .mode-toggle {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 24px;
+            padding: 16px;
+            background: var(--surface-1);
+            border-radius: 8px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--edit-active);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: var(--surface-2);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background: var(--surface-3);
+        }
+
+        .btn-secondary.active {
+            background: var(--edit-active);
+            color: white;
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .divider {
+            flex: 1;
+        }
+
+        .stats {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        /* Segment Card */
+        .segment-card {
+            background: var(--surface-1);
+            border: 2px solid transparent;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            transition: all 0.2s;
+        }
+
+        .segment-card:hover {
+            background: var(--surface-2);
+        }
+
+        .segment-card.edit-mode {
+            border-color: var(--surface-2);
+        }
+
+        .segment-card.editing {
+            border-color: var(--edit-active);
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+        }
+
+        .segment-card.modified {
+            border-left: 4px solid var(--edit-modified);
+        }
+
+        .segment-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .speaker-dropdown {
+            padding: 6px 12px;
+            background: var(--surface-2);
+            border: 1px solid var(--surface-3);
+            border-radius: 4px;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .speaker-dropdown:hover {
+            background: var(--surface-3);
+        }
+
+        .speaker-dropdown.speaker-1 {
+            border-left: 4px solid var(--speaker-1);
+        }
+
+        .speaker-dropdown.speaker-2 {
+            border-left: 4px solid var(--speaker-2);
+        }
+
+        .timestamp {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: var(--text-tertiary);
+            background: var(--surface-2);
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .timestamp:hover {
+            color: var(--edit-active);
+            background: var(--surface-3);
+        }
+
+        .timestamp-arrow {
+            color: var(--text-tertiary);
+            font-size: 12px;
+        }
+
+        .menu-btn {
+            margin-left: auto;
+            background: none;
+            border: none;
+            color: var(--text-tertiary);
+            font-size: 20px;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .menu-btn:hover {
+            background: var(--surface-3);
+            color: var(--text-primary);
+        }
+
+        .segment-text {
+            font-size: 15px;
+            line-height: 1.6;
+            color: var(--text-primary);
+            padding: 8px;
+            border-radius: 4px;
+            min-height: 40px;
+        }
+
+        .segment-text[contenteditable="true"] {
+            background: rgba(255, 255, 255, 0.02);
+            outline: none;
+            cursor: text;
+        }
+
+        .segment-text[contenteditable="true"]:focus {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .segment-footer {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--surface-2);
+            font-size: 13px;
+            color: var(--text-tertiary);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge-warning {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--edit-modified);
+        }
+
+        .badge-success {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--edit-success);
+        }
+
+        /* Context Menu */
+        .context-menu {
+            position: absolute;
+            background: var(--surface-2);
+            border: 1px solid var(--surface-3);
+            border-radius: 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            padding: 8px;
+            min-width: 200px;
+            z-index: 1000;
+            display: none;
+        }
+
+        .context-menu.show {
+            display: block;
+        }
+
+        .menu-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+
+        .menu-item:hover {
+            background: var(--surface-3);
+        }
+
+        .menu-divider {
+            height: 1px;
+            background: var(--surface-3);
+            margin: 8px 0;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            display: none;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--surface-1);
+            border: 1px solid var(--surface-3);
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .modal h3 {
+            margin-bottom: 20px;
+            font-size: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--surface-2);
+            border: 1px solid var(--surface-3);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--edit-active);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .validation-error {
+            color: var(--edit-error);
+            font-size: 13px;
+            margin-top: 8px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        /* Timeline */
+        .timeline {
+            background: var(--surface-1);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .timeline-header {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-secondary);
+        }
+
+        .timeline-track {
+            position: relative;
+            height: 40px;
+            background: var(--surface-2);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .timeline-segment {
+            position: absolute;
+            height: 100%;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .timeline-segment:hover {
+            opacity: 0.8;
+        }
+
+        .timeline-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--text-tertiary);
+            font-family: 'Courier New', monospace;
+        }
+
+        .demo-controls {
+            background: var(--surface-1);
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+        }
+
+        .demo-controls h3 {
+            margin-bottom: 12px;
+            font-size: 16px;
+            color: var(--text-secondary);
+        }
+
+        .demo-controls button {
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
+
+        .notification {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--surface-2);
+            border: 1px solid var(--surface-3);
+            border-radius: 8px;
+            padding: 16px 20px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            display: none;
+            align-items: center;
+            gap: 12px;
+            z-index: 3000;
+        }
+
+        .notification.show {
+            display: flex;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Transcript Editor - Interactive Design Mockup</h1>
+        <p class="subtitle">This mockup demonstrates the proposed editing interface with interactive elements</p>
+
+        <!-- Demo Controls -->
+        <div class="demo-controls">
+            <h3>Try These Actions:</h3>
+            <button class="btn btn-secondary" onclick="toggleEditMode()">Toggle Edit Mode</button>
+            <button class="btn btn-secondary" onclick="simulateEdit()">Simulate Text Edit</button>
+            <button class="btn btn-secondary" onclick="simulateSave()">Simulate Save</button>
+            <button class="btn btn-secondary" onclick="showTimestampModal()">Open Timestamp Editor</button>
+            <button class="btn btn-secondary" onclick="showNewSpeakerModal()">Create New Speaker</button>
+        </div>
+
+        <!-- Mode Toggle -->
+        <div class="mode-toggle">
+            <button class="btn btn-secondary" id="view-mode-btn" onclick="setMode('view')">View Mode</button>
+            <button class="btn btn-secondary active" id="edit-mode-btn" onclick="setMode('edit')">Edit Mode</button>
+            <div class="divider"></div>
+            <button class="btn btn-secondary" id="undo-btn" onclick="showNotification('Undo successful', 'success')">↶ Undo</button>
+            <button class="btn btn-secondary" id="redo-btn" onclick="showNotification('Redo successful', 'success')" disabled>↷ Redo</button>
+            <div class="divider"></div>
+            <span class="stats" id="stats">3 segments • 2 speakers • Modified</span>
+        </div>
+
+        <!-- Timeline (Optional Feature) -->
+        <div class="timeline">
+            <div class="timeline-header">Timeline Overview</div>
+            <div class="timeline-track">
+                <div class="timeline-segment" style="left: 0%; width: 35%; background: var(--speaker-1);">S1</div>
+                <div class="timeline-segment" style="left: 37%; width: 28%; background: var(--speaker-2);">S2</div>
+                <div class="timeline-segment" style="left: 67%; width: 30%; background: var(--speaker-1);">S1</div>
+            </div>
+            <div class="timeline-labels">
+                <span>0:00</span>
+                <span>0:30</span>
+                <span>1:00</span>
+                <span>1:30</span>
+                <span>2:00</span>
+            </div>
+        </div>
+
+        <!-- Segment 1 -->
+        <div class="segment-card edit-mode" id="segment-1">
+            <div class="segment-header">
+                <select class="speaker-dropdown speaker-1" onchange="changeSpeaker(this)">
+                    <option value="speaker1" selected>Speaker 1</option>
+                    <option value="speaker2">Speaker 2</option>
+                    <option value="__new__">+ Add new speaker...</option>
+                </select>
+                <span class="timestamp" onclick="showTimestampModal()">00:00.42</span>
+                <span class="timestamp-arrow">→</span>
+                <span class="timestamp" onclick="showTimestampModal()">00:12.87</span>
+                <button class="menu-btn" onclick="toggleContextMenu(event, 'segment-1')">⋮</button>
+            </div>
+            <div class="segment-text" contenteditable="true"
+                 onfocus="startEditing(this)"
+                 onblur="stopEditing(this)">
+                Welcome to the transcript editor. This is a demonstration of how the editing interface will work with inline text editing capabilities.
+            </div>
+            <div class="segment-footer">
+                <span>Duration: 12.45s</span>
+                <span>•</span>
+                <span>18 words</span>
+            </div>
+        </div>
+
+        <!-- Segment 2 (Modified) -->
+        <div class="segment-card edit-mode modified" id="segment-2">
+            <div class="segment-header">
+                <select class="speaker-dropdown speaker-2" onchange="changeSpeaker(this)">
+                    <option value="speaker1">Speaker 1</option>
+                    <option value="speaker2" selected>Speaker 2</option>
+                    <option value="__new__">+ Add new speaker...</option>
+                </select>
+                <span class="timestamp" onclick="showTimestampModal()">00:14.20</span>
+                <span class="timestamp-arrow">→</span>
+                <span class="timestamp" onclick="showTimestampModal()">00:28.95</span>
+                <button class="menu-btn" onclick="toggleContextMenu(event, 'segment-2')">⋮</button>
+            </div>
+            <div class="segment-text" contenteditable="true"
+                 onfocus="startEditing(this)"
+                 onblur="stopEditing(this)">
+                This segment has been modified. Notice the orange indicator on the left side showing unsaved changes.
+            </div>
+            <div class="segment-footer">
+                <span>Duration: 14.75s</span>
+                <span>•</span>
+                <span>15 words</span>
+                <span class="badge badge-warning">⚠ Modified</span>
+            </div>
+        </div>
+
+        <!-- Segment 3 -->
+        <div class="segment-card edit-mode" id="segment-3">
+            <div class="segment-header">
+                <select class="speaker-dropdown speaker-1" onchange="changeSpeaker(this)">
+                    <option value="speaker1" selected>Speaker 1</option>
+                    <option value="speaker2">Speaker 2</option>
+                    <option value="__new__">+ Add new speaker...</option>
+                </select>
+                <span class="timestamp" onclick="showTimestampModal()">00:30.10</span>
+                <span class="timestamp-arrow">→</span>
+                <span class="timestamp" onclick="showTimestampModal()">00:45.60</span>
+                <button class="menu-btn" onclick="toggleContextMenu(event, 'segment-3')">⋮</button>
+            </div>
+            <div class="segment-text" contenteditable="true"
+                 onfocus="startEditing(this)"
+                 onblur="stopEditing(this)">
+                You can split this segment by placing your cursor anywhere and selecting "Split at cursor" from the menu. Try clicking the three-dot menu above!
+            </div>
+            <div class="segment-footer">
+                <span>Duration: 15.50s</span>
+                <span>•</span>
+                <span>22 words</span>
+            </div>
+        </div>
+
+        <!-- Context Menu -->
+        <div class="context-menu" id="context-menu">
+            <div class="menu-item" onclick="simulateSplit()">
+                <span>✂</span>
+                <span>Split at cursor</span>
+            </div>
+            <div class="menu-item" onclick="simulateMerge()">
+                <span>🔗</span>
+                <span>Merge with next</span>
+            </div>
+            <div class="menu-item" onclick="simulateDelete()">
+                <span>🗑</span>
+                <span>Delete segment</span>
+            </div>
+            <div class="menu-divider"></div>
+            <div class="menu-item" onclick="simulateSave()">
+                <span>💾</span>
+                <span>Save changes</span>
+            </div>
+        </div>
+
+        <!-- Timestamp Modal -->
+        <div class="modal-overlay" id="timestamp-modal">
+            <div class="modal">
+                <h3>Edit Timestamps</h3>
+                <div class="form-group">
+                    <label>Start Time</label>
+                    <input type="text" value="00:00.42" placeholder="MM:SS.ms" id="start-time">
+                </div>
+                <div class="form-group">
+                    <label>End Time</label>
+                    <input type="text" value="00:12.87" placeholder="MM:SS.ms" id="end-time">
+                </div>
+                <div id="validation-messages"></div>
+                <div class="modal-actions">
+                    <button class="btn btn-primary" onclick="saveTimestamp()">Save</button>
+                    <button class="btn btn-secondary" onclick="closeModal('timestamp-modal')">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- New Speaker Modal -->
+        <div class="modal-overlay" id="speaker-modal">
+            <div class="modal">
+                <h3>Create New Speaker</h3>
+                <div class="form-group">
+                    <label>Speaker Name</label>
+                    <input type="text" placeholder="e.g., John Doe" id="new-speaker-name">
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-primary" onclick="createSpeaker()">Create</button>
+                    <button class="btn btn-secondary" onclick="closeModal('speaker-modal')">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notification -->
+        <div class="notification" id="notification">
+            <span id="notification-icon">✓</span>
+            <span id="notification-text">Changes saved successfully</span>
+        </div>
+    </div>
+
+    <script>
+        let isEditMode = true;
+        let contextMenuTarget = null;
+
+        function toggleEditMode() {
+            isEditMode = !isEditMode;
+            setMode(isEditMode ? 'edit' : 'view');
+        }
+
+        function setMode(mode) {
+            isEditMode = mode === 'edit';
+            document.getElementById('view-mode-btn').classList.toggle('active', !isEditMode);
+            document.getElementById('edit-mode-btn').classList.toggle('active', isEditMode);
+
+            document.querySelectorAll('.segment-card').forEach(card => {
+                card.classList.toggle('edit-mode', isEditMode);
+                const textEl = card.querySelector('.segment-text');
+                textEl.contentEditable = isEditMode;
+            });
+        }
+
+        function startEditing(element) {
+            element.parentElement.classList.add('editing');
+        }
+
+        function stopEditing(element) {
+            element.parentElement.classList.remove('editing');
+        }
+
+        function toggleContextMenu(event, segmentId) {
+            event.stopPropagation();
+            const menu = document.getElementById('context-menu');
+            const rect = event.target.getBoundingClientRect();
+
+            menu.style.left = rect.left + 'px';
+            menu.style.top = (rect.bottom + 5) + 'px';
+            menu.classList.toggle('show');
+
+            contextMenuTarget = segmentId;
+        }
+
+        function showTimestampModal() {
+            document.getElementById('timestamp-modal').classList.add('show');
+        }
+
+        function showNewSpeakerModal() {
+            document.getElementById('speaker-modal').classList.add('show');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('show');
+        }
+
+        function saveTimestamp() {
+            showNotification('Timestamps updated successfully', 'success');
+            closeModal('timestamp-modal');
+        }
+
+        function createSpeaker() {
+            const name = document.getElementById('new-speaker-name').value;
+            if (name) {
+                showNotification(`Speaker "${name}" created`, 'success');
+                closeModal('speaker-modal');
+            }
+        }
+
+        function changeSpeaker(select) {
+            if (select.value === '__new__') {
+                showNewSpeakerModal();
+                select.selectedIndex = 0;
+            } else {
+                showNotification('Speaker changed', 'success');
+            }
+        }
+
+        function simulateEdit() {
+            const segment = document.getElementById('segment-2');
+            segment.classList.add('modified');
+            showNotification('Text modified (unsaved)', 'warning');
+        }
+
+        function simulateSave() {
+            document.querySelectorAll('.segment-card.modified').forEach(card => {
+                card.classList.remove('modified');
+            });
+            showNotification('Changes saved successfully', 'success');
+        }
+
+        function simulateSplit() {
+            showNotification('Segment split at cursor position', 'success');
+            hideContextMenu();
+        }
+
+        function simulateMerge() {
+            showNotification('Segments merged successfully', 'success');
+            hideContextMenu();
+        }
+
+        function simulateDelete() {
+            if (confirm('Delete this segment?')) {
+                showNotification('Segment deleted', 'success');
+            }
+            hideContextMenu();
+        }
+
+        function hideContextMenu() {
+            document.getElementById('context-menu').classList.remove('show');
+        }
+
+        function showNotification(text, type) {
+            const notification = document.getElementById('notification');
+            const icon = document.getElementById('notification-icon');
+            const textEl = document.getElementById('notification-text');
+
+            if (type === 'success') {
+                icon.textContent = '✓';
+            } else if (type === 'warning') {
+                icon.textContent = '⚠';
+            }
+
+            textEl.textContent = text;
+            notification.classList.add('show');
+
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+
+        // Close context menu when clicking outside
+        document.addEventListener('click', function(event) {
+            const menu = document.getElementById('context-menu');
+            if (!menu.contains(event.target)) {
+                hideContextMenu();
+            }
+        });
+
+        // Close modals when clicking overlay
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', function(event) {
+                if (event.target === overlay) {
+                    overlay.classList.remove('show');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
