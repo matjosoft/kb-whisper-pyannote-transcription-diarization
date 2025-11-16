@@ -43,6 +43,7 @@ class TranscriptEditor {
         this.editModeToggle = document.getElementById('editModeToggle');
         this.undoBtn = document.getElementById('undoBtn');
         this.redoBtn = document.getElementById('redoBtn');
+        this.saveBtn = document.getElementById('saveBtn');
         this.editStats = document.getElementById('editStats');
         this.saveIndicator = document.getElementById('saveIndicator');
     }
@@ -59,6 +60,11 @@ class TranscriptEditor {
         }
         if (this.redoBtn) {
             this.redoBtn.addEventListener('click', () => this.redo());
+        }
+
+        // Save button
+        if (this.saveBtn) {
+            this.saveBtn.addEventListener('click', () => this.save());
         }
 
         // Keyboard shortcuts
@@ -419,6 +425,11 @@ class TranscriptEditor {
             }
         }
 
+        // Update save button
+        if (this.saveBtn) {
+            this.saveBtn.disabled = !this.hasUnsavedChanges;
+        }
+
         // Update edit mode toggle
         if (this.editModeToggle) {
             this.editModeToggle.checked = this.isEditMode;
@@ -463,11 +474,40 @@ class TranscriptEditor {
             this.redo();
         }
 
-        // Ctrl/Cmd + S = Save (mark as saved)
+        // Ctrl/Cmd + S = Save changes
         if ((e.ctrlKey || e.metaKey) && e.key === 's') {
             e.preventDefault();
-            this.markAsSaved();
+            this.save();
         }
+    }
+
+    /**
+     * Save changes - sync edited data back to app.currentResults
+     */
+    save() {
+        if (!this.hasUnsavedChanges) {
+            if (window.Toast) {
+                Toast.show('No changes to save', 'info');
+            }
+            return;
+        }
+
+        // Update app.currentResults with edited data
+        const editedResults = this.getResults();
+        this.app.currentResults = editedResults;
+
+        // Update app's speaker names
+        this.app.speakerNames = { ...editedResults.speakers };
+
+        // Update the speaker editor display
+        if (this.app.createSpeakerEditor) {
+            this.app.createSpeakerEditor(editedResults.speakers);
+        }
+
+        // Mark as saved
+        this.markAsSaved();
+
+        console.log('Changes saved to currentResults');
     }
 
     /**
