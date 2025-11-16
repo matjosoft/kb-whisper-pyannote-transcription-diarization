@@ -1619,7 +1619,7 @@ body {
     background: rgba(255, 255, 255, 0.05);
 }
 
-/* Speaker Dropdown (will be used in Phase 3) */
+/* Speaker Dropdown */
 .speaker-dropdown {
     padding: 6px 12px;
     background: var(--color-surface);
@@ -1641,6 +1641,31 @@ body {
     outline: none;
     border-color: var(--color-primary);
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Speaker color indicators on dropdown */
+.speaker-dropdown.speaker-1 {
+    border-left: 4px solid var(--color-accent-1);
+}
+
+.speaker-dropdown.speaker-2 {
+    border-left: 4px solid var(--color-accent-2);
+}
+
+.speaker-dropdown.speaker-3 {
+    border-left: 4px solid var(--color-accent-3);
+}
+
+.speaker-dropdown.speaker-4 {
+    border-left: 4px solid var(--color-accent-4);
+}
+
+.speaker-dropdown.speaker-5 {
+    border-left: 4px solid var(--color-accent-5);
+}
+
+.speaker-dropdown.speaker-6 {
+    border-left: 4px solid var(--color-accent-6);
 }
 
 /* Timestamp Editor (will be used in Phase 4) */

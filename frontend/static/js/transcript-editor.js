@@ -26,8 +26,12 @@ class TranscriptEditor {
         // Segment editors (map of segmentId -> SegmentEditor)
         this.segmentEditors = new Map();
 
+        // Speaker manager
+        this.speakerManager = null;
+
         this.initializeElements();
         this.setupEventListeners();
+        this.initializeSpeakerManager();
     }
 
     initializeElements() {
@@ -64,6 +68,23 @@ class TranscriptEditor {
                 return e.returnValue;
             }
         });
+    }
+
+    /**
+     * Initialize speaker manager
+     */
+    initializeSpeakerManager() {
+        try {
+            if (typeof SpeakerManager !== 'undefined') {
+                this.speakerManager = new SpeakerManager(this);
+                this.speakerManager.init();
+                console.log('Speaker manager initialized');
+            } else {
+                console.warn('SpeakerManager not available');
+            }
+        } catch (error) {
+            console.error('Failed to initialize speaker manager:', error);
+        }
     }
 
     /**
@@ -215,17 +236,22 @@ class TranscriptEditor {
         const header = document.createElement('div');
         header.className = 'segment-header';
 
-        // Speaker name (editable in future phase)
-        const speakerName = document.createElement('span');
-        speakerName.className = 'speaker-name';
-        speakerName.textContent = this.app.speakerNames[segment.speaker] || segment.speaker;
+        // Speaker dropdown (or name if speaker manager not available)
+        if (this.speakerManager) {
+            const speakerDropdown = this.speakerManager.createSpeakerDropdown(segment);
+            header.appendChild(speakerDropdown);
+        } else {
+            const speakerName = document.createElement('span');
+            speakerName.className = 'speaker-name';
+            speakerName.textContent = this.app.speakerNames[segment.speaker] || segment.speaker;
+            header.appendChild(speakerName);
+        }
 
         // Timestamp
         const timeStamp = document.createElement('span');
         timeStamp.className = 'segment-time';
         timeStamp.textContent = `[${this.app.formatTime(segment.start)} - ${this.app.formatTime(segment.end)}]`;
 
-        header.appendChild(speakerName);
         header.appendChild(timeStamp);
 
         // Text (will be made editable in Phase 2)

@@ -605,6 +605,11 @@ class AudioScribeApp {
             input.addEventListener('input', (e) => {
                 this.speakerNames[speakerId] = e.target.value || speakerId;
                 this.updateTranscriptionDisplay();
+
+                // Sync with transcript editor if in edit mode
+                if (this.transcriptEditor && this.transcriptEditor.speakerManager) {
+                    this.transcriptEditor.speakerManager.renameSpeaker(speakerId, e.target.value || speakerId);
+                }
             });
             
             inputGroup.appendChild(label);
