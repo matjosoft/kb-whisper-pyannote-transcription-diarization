@@ -149,6 +149,14 @@
                             <button id="karaokeToggleBtn" class="karaoke-toggle-btn">
                                 <span>🎵</span> Show Karaoke View
                             </button>
+                            <div class="edit-controls">
+                                <button id="editModeBtn" class="edit-mode-btn">
+                                    <span>✏️</span> Edit Transcript
+                                </button>
+                                <button id="saveEditsBtn" class="save-edits-btn hidden">
+                                    <span>💾</span> Save Edits
+                                </button>
+                            </div>
                         </div>
                     </div>
                     
@@ -184,6 +192,17 @@
                         <div class="current-text-display">
                             <div class="current-speaker" id="currentSpeaker">Speaker</div>
                             <div class="current-text" id="currentText">Audio text will appear here as it plays...</div>
+                        </div>
+
+                        <!-- Edit Mode Help -->
+                        <div class="edit-mode-help hidden" id="editModeHelp">
+                            <strong>Edit Mode Instructions:</strong>
+                            <ul>
+                                <li><strong>Edit Text:</strong> Double-click any segment to edit its text. Press Enter to save or Escape to cancel.</li>
+                                <li><strong>Adjust Boundaries:</strong> Hover over a segment and drag the handles on the left/right edges to adjust start/end times.</li>
+                                <li><strong>Change Speaker:</strong> Click and hold a segment, then drag it up or down to move it to a different speaker lane.</li>
+                                <li><strong>Save Changes:</strong> Click "Save Edits" to apply your changes. Edited segments are highlighted in yellow.</li>
+                            </ul>
                         </div>
                     </div>
                 </div>

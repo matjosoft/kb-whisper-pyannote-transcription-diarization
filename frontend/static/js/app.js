@@ -63,6 +63,9 @@ class AudioScribeApp {
         // Recording completion
         document.addEventListener('recordingComplete', (e) => this.handleRecordingComplete(e));
 
+        // Transcript editing
+        document.addEventListener('transcriptEdited', (e) => this.handleTranscriptEdited(e));
+
         // Action buttons
         this.exportWordBtn.addEventListener('click', () => this.exportToWord());
         this.exportTxtBtn.addEventListener('click', () => this.exportToTxt());
@@ -150,6 +153,20 @@ class AudioScribeApp {
         // Store the audio blob for karaoke player
         this.currentAudioFile = audioBlob;
         this.processAudio(audioBlob, 'recording');
+    }
+
+    handleTranscriptEdited(event) {
+        const { segments, editedCount } = event.detail;
+
+        // Update current results with edited segments
+        if (this.currentResults) {
+            this.currentResults.segments = segments;
+
+            // Update the transcription display
+            this.displayTranscription(segments);
+
+            window.toast.success('Transcript Updated', `${editedCount} segments have been updated in the transcript`);
+        }
     }
 
     handleDragOver(e) {

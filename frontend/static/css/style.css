@@ -966,6 +966,13 @@ body {
     margin: 0;
 }
 
+.karaoke-controls {
+    display: flex;
+    gap: var(--spacing-md);
+    align-items: center;
+    flex-wrap: wrap;
+}
+
 .karaoke-toggle-btn {
     background: var(--gradient-primary);
     border: none;
@@ -1294,6 +1301,165 @@ body {
     background: var(--color-primary-hover);
 }
 
+/* Edit Mode Styles */
+.edit-controls {
+    display: flex;
+    gap: var(--spacing-md);
+    align-items: center;
+}
+
+.edit-mode-btn {
+    background: var(--gradient-primary);
+    border: none;
+    border-radius: var(--radius-md);
+    padding: var(--spacing-sm) var(--spacing-lg);
+    color: white;
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: all var(--transition-base);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.edit-mode-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md), var(--shadow-glow-primary);
+}
+
+.edit-mode-btn.active {
+    background: var(--color-success);
+    box-shadow: 0 0 15px rgba(76, 175, 80, 0.4);
+}
+
+.save-edits-btn {
+    background: linear-gradient(135deg, #4CAF50, #2E7D32);
+    border: none;
+    border-radius: var(--radius-md);
+    padding: var(--spacing-sm) var(--spacing-lg);
+    color: white;
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: all var(--transition-base);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.save-edits-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md), 0 0 15px rgba(76, 175, 80, 0.4);
+}
+
+.save-edits-btn.hidden {
+    display: none;
+}
+
+/* Editable Segment Styles */
+.text-segment.editable {
+    cursor: move;
+    border: 2px solid transparent;
+    position: relative;
+}
+
+.text-segment.editable:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.text-segment.edited {
+    border: 2px solid #FFC107;
+    box-shadow: 0 0 10px rgba(255, 193, 7, 0.5);
+}
+
+.text-segment.dragging {
+    opacity: 0.6;
+    cursor: grabbing;
+    z-index: 100;
+}
+
+.text-segment.dragging-boundary {
+    border-color: #2196F3;
+    box-shadow: 0 0 15px rgba(33, 150, 243, 0.6);
+}
+
+/* Boundary Handles */
+.boundary-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    background: rgba(255, 255, 255, 0.8);
+    cursor: ew-resize;
+    opacity: 0;
+    transition: opacity var(--transition-base);
+    z-index: 10;
+}
+
+.boundary-handle:hover {
+    opacity: 1;
+    background: #2196F3;
+}
+
+.text-segment.editable:hover .boundary-handle {
+    opacity: 0.6;
+}
+
+.boundary-handle.left-handle {
+    left: 0;
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.boundary-handle.right-handle {
+    right: 0;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* Speaker Lane Drop Target */
+.speaker-lane.drop-target {
+    background: rgba(33, 150, 243, 0.2);
+    border: 2px dashed #2196F3;
+    border-radius: var(--radius-lg);
+}
+
+.speaker-lane.drop-target .lane-timeline {
+    background: rgba(33, 150, 243, 0.1);
+}
+
+/* Segment Text Editor */
+.segment-text-editor {
+    border-radius: var(--radius-sm);
+    outline: 2px solid #2196F3;
+    box-shadow: 0 0 10px rgba(33, 150, 243, 0.5);
+}
+
+/* Edit Mode Help Text */
+.edit-mode-help {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    margin-top: var(--spacing-md);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    line-height: var(--line-height-relaxed);
+}
+
+.edit-mode-help strong {
+    color: var(--color-text-primary);
+    font-weight: var(--font-weight-semibold);
+}
+
+.edit-mode-help ul {
+    margin: var(--spacing-xs) 0 0 var(--spacing-lg);
+    padding: 0;
+}
+
+.edit-mode-help li {
+    margin-bottom: var(--spacing-xs);
+}
+
 /* Responsive Design for Karaoke Player */
 @media (max-width: 768px) {
     .audio-controls {
@@ -1326,6 +1492,14 @@ body {
         flex-direction: column;
         gap: 15px;
         align-items: stretch;
+    }
+
+    .edit-controls {
+        flex-direction: column;
+    }
+
+    .boundary-handle {
+        width: 12px;
     }
 }
 
