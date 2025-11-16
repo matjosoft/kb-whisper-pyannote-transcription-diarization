@@ -121,6 +121,31 @@
                     </div>
                 </div>
 
+                <!-- Edit Mode Controls -->
+                <div class="edit-mode-controls hidden" id="editControls">
+                    <div class="edit-controls-header">
+                        <div class="mode-toggle-section">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="editModeToggle" class="toggle-checkbox">
+                                <span class="toggle-text">✏️ Edit Mode</span>
+                            </label>
+                            <p class="option-description">Enable editing to modify text, speakers, and timestamps</p>
+                        </div>
+                        <div class="edit-actions">
+                            <button id="undoBtn" class="action-btn" disabled title="Undo (Ctrl+Z)">
+                                <span>↶</span> Undo
+                            </button>
+                            <button id="redoBtn" class="action-btn" disabled title="Redo (Ctrl+Y)">
+                                <span>↷</span> Redo
+                            </button>
+                            <div class="edit-stats-container">
+                                <span id="editStats" class="edit-stats"></span>
+                                <span id="saveIndicator" class="save-indicator saved">✓ All changes saved</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Export Options -->
                 <div class="export-options" id="exportOptions">
                     <h3>📋 TXT Export Options</h3>
@@ -203,6 +228,8 @@
     <script src="/static/js/toast.js"></script>
     <script src="/static/js/recorder.js"></script>
     <script src="/static/js/karaoke-player.js"></script>
+    <script src="/static/js/edit-history.js"></script>
+    <script src="/static/js/transcript-editor.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>

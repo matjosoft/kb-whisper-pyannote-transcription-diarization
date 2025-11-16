@@ -7,11 +7,13 @@ class AudioScribeApp {
         this.karaokePlayer = null;
         this.currentAudioFile = null;
         this.transcriptionOnlyMode = false;
+        this.transcriptEditor = null;
 
         this.initializeElements();
         this.setupEventListeners();
         this.initializeRecorder();
         this.initializeKaraokePlayer();
+        this.initializeEditor();
     }
 
     initializeElements() {
@@ -107,6 +109,23 @@ class AudioScribeApp {
             }
         } catch (error) {
             console.error('Failed to initialize karaoke player:', error);
+        }
+    }
+
+    initializeEditor() {
+        try {
+            if (typeof TranscriptEditor !== 'undefined') {
+                this.transcriptEditor = new TranscriptEditor(this);
+                // Initialize edit history
+                if (typeof EditHistory !== 'undefined') {
+                    new EditHistory(this.transcriptEditor);
+                }
+                console.log('Transcript editor initialized');
+            } else {
+                console.warn('TranscriptEditor not available');
+            }
+        } catch (error) {
+            console.error('Failed to initialize transcript editor:', error);
         }
     }
 
@@ -551,6 +570,16 @@ class AudioScribeApp {
         // Load results into karaoke player
         if (this.karaokePlayer && this.currentResults) {
             this.karaokePlayer.loadTranscriptionResults(this.currentResults, this.currentAudioFile);
+        }
+
+        // Load results into transcript editor
+        if (this.transcriptEditor) {
+            this.transcriptEditor.loadTranscript(results);
+            // Show edit controls
+            const editControls = document.getElementById('editControls');
+            if (editControls) {
+                editControls.classList.remove('hidden');
+            }
         }
 
         // Update speaker checkbox state based on transcription-only mode
