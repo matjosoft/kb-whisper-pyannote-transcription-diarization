@@ -33,8 +33,10 @@ class Settings:
         self.whisper_language = os.getenv("WHISPER_LANGUAGE", "sv")  # auto-detect or specific language
         self.whisper_use_local = os.getenv("WHISPER_USE_LOCAL", "true").lower() == "true"
         self.whisper_use_vllm = os.getenv("WHISPER_USE_VLLM", "false").lower() == "true"
+        self.whisper_use_remote = os.getenv("WHISPER_USE_REMOTE", "false").lower() == "true"
         self.whisper_local_model_path = os.getenv("WHISPER_LOCAL_MODEL_PATH", f"D:\Develop\AI\kb-whisper\model\model.safetensors")
         self.whisper_local_model_name = os.getenv("WHISPER_LOCAL_MODEL_NAME", "KBLab/kb-whisper-large")
+        self.whisper_remote_url = os.getenv("WHISPER_REMOTE_URL", "http://localhost:8002")
 
         # vLLM settings
         self.vllm_base_url = os.getenv("VLLM_BASE_URL", "http://localhost:8000/v1")
@@ -42,7 +44,9 @@ class Settings:
         self.vllm_model_name = os.getenv("VLLM_MODEL_NAME", "KBLab/kb-whisper-large")
         self.vllm_max_audio_filesize_mb = int(os.getenv("VLLM_MAX_AUDIO_FILESIZE_MB", "25"))
 
-        # Debug print vLLM settings if enabled
+        # Debug print Whisper settings if remote or vLLM is enabled
+        if self.whisper_use_remote:
+            print(f"🔧 Remote Whisper enabled: {self.whisper_remote_url}")
         if self.whisper_use_vllm:
             print(f"🔧 vLLM enabled: {self.vllm_base_url} | Model: {self.vllm_model_name}")
             print(f"🔧 vLLM max file size: {self.vllm_max_audio_filesize_mb}MB (large files split into 30s chunks)")
