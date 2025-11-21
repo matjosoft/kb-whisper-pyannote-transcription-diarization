@@ -7,33 +7,39 @@ from utils.config import get_settings
 logger = logging.getLogger(__name__)
 
 class UnifiedWhisperService:
-    """Unified service that can use vLLM, local Whisper, or OpenAI Whisper models"""
+    """Unified service that can use remote Whisper, vLLM, local Whisper, or OpenAI Whisper models"""
 
     def __init__(self):
         self.settings = get_settings()
         self.whisper_service = None
         self.local_whisper_service = None
         self.vllm_whisper_service = None
+        self.remote_whisper_service = None
         self._initialize_services()
     
     def _initialize_services(self):
         """Initialize the appropriate Whisper service based on configuration"""
         try:
-            # Priority 1: vLLM (if enabled)
-            if self.settings.whisper_use_vllm:
-                logger.info("Initializing vLLM Whisper service")
-                from .vllm_whisper_service import VllmWhisperService
-                self.vllm_whisper_service = VllmWhisperService()
-                if not self.vllm_whisper_service.is_available():
-                    logger.warning("vLLM Whisper service failed to initialize, falling back to local or OpenAI Whisper")
-                    if self.settings.whisper_use_local:
+            # Priority 1: Remote Whisper (if enabled)
+            if self.settings.whisper_use_remote:
+                logger.info("Initializing remote Whisper service")
+                from .remote_whisper_service import RemoteWhisperService
+                self.remote_whisper_service = RemoteWhisperService()
+                if not self.remote_whisper_service.is_available():
+                    logger.warning("Remote Whisper service failed to initialize, falling back to vLLM, local, or OpenAI Whisper")
+                    if self.settings.whisper_use_vllm:
+                        self._initialize_vllm_whisper()
+                    elif self.settings.whisper_use_local:
                         self._initialize_local_whisper()
                     else:
                         self._initialize_openai_whisper()
-            # Priority 2: Local Whisper (if enabled and vLLM not enabled)
+            # Priority 2: vLLM (if enabled and remote not enabled)
+            elif self.settings.whisper_use_vllm:
+                self._initialize_vllm_whisper()
+            # Priority 3: Local Whisper (if enabled and vLLM not enabled)
             elif self.settings.whisper_use_local:
                 self._initialize_local_whisper()
-            # Priority 3: OpenAI Whisper (default fallback)
+            # Priority 4: OpenAI Whisper (default fallback)
             else:
                 logger.info("Initializing OpenAI Whisper service")
                 self._initialize_openai_whisper()
@@ -42,6 +48,25 @@ class UnifiedWhisperService:
             logger.error(f"Failed to initialize Whisper services: {e}")
             # Try to fall back to OpenAI Whisper
             self._initialize_openai_whisper()
+
+    def _initialize_vllm_whisper(self):
+        """Initialize vLLM Whisper service"""
+        try:
+            logger.info("Initializing vLLM Whisper service")
+            from .vllm_whisper_service import VllmWhisperService
+            self.vllm_whisper_service = VllmWhisperService()
+            if not self.vllm_whisper_service.is_available():
+                logger.warning("vLLM Whisper service failed to initialize, falling back to local or OpenAI Whisper")
+                if self.settings.whisper_use_local:
+                    self._initialize_local_whisper()
+                else:
+                    self._initialize_openai_whisper()
+        except Exception as e:
+            logger.error(f"Failed to initialize vLLM Whisper service: {e}")
+            if self.settings.whisper_use_local:
+                self._initialize_local_whisper()
+            else:
+                self._initialize_openai_whisper()
 
     def _initialize_local_whisper(self):
         """Initialize local Whisper service"""
@@ -55,7 +80,7 @@ class UnifiedWhisperService:
         except Exception as e:
             logger.error(f"Failed to initialize local Whisper service: {e}")
             self._initialize_openai_whisper()
-    
+
     def _initialize_openai_whisper(self):
         """Initialize OpenAI Whisper service"""
         try:
@@ -67,7 +92,9 @@ class UnifiedWhisperService:
     
     def is_available(self) -> bool:
         """Check if any Whisper service is available"""
-        if self.settings.whisper_use_vllm and self.vllm_whisper_service:
+        if self.settings.whisper_use_remote and self.remote_whisper_service:
+            return self.remote_whisper_service.is_available()
+        elif self.settings.whisper_use_vllm and self.vllm_whisper_service:
             return self.vllm_whisper_service.is_available()
         elif self.settings.whisper_use_local and self.local_whisper_service:
             return self.local_whisper_service.is_available()
@@ -89,15 +116,19 @@ class UnifiedWhisperService:
             raise RuntimeError("No Whisper service available")
 
         try:
-            # Priority 1: vLLM
-            if self.settings.whisper_use_vllm and self.vllm_whisper_service and self.vllm_whisper_service.is_available():
+            # Priority 1: Remote Whisper
+            if self.settings.whisper_use_remote and self.remote_whisper_service and self.remote_whisper_service.is_available():
+                logger.info("Using remote Whisper service for transcription")
+                return self.remote_whisper_service.transcribe(audio_path)
+            # Priority 2: vLLM
+            elif self.settings.whisper_use_vllm and self.vllm_whisper_service and self.vllm_whisper_service.is_available():
                 logger.info("Using vLLM Whisper service for transcription")
                 return self.vllm_whisper_service.transcribe(audio_path)
-            # Priority 2: Local Whisper
+            # Priority 3: Local Whisper
             elif self.settings.whisper_use_local and self.local_whisper_service and self.local_whisper_service.is_available():
                 logger.info("Using local Whisper service for transcription")
                 return self.local_whisper_service.transcribe(audio_path)
-            # Priority 3: OpenAI Whisper
+            # Priority 4: OpenAI Whisper
             elif self.whisper_service and self.whisper_service.is_available():
                 logger.info("Using OpenAI Whisper service for transcription")
                 return self.whisper_service.transcribe(audio_path)
@@ -105,8 +136,21 @@ class UnifiedWhisperService:
                 raise RuntimeError("No available Whisper service for transcription")
 
         except Exception as e:
-            # Fallback chain: vLLM -> Local -> OpenAI
-            if self.settings.whisper_use_vllm:
+            # Fallback chain: Remote -> vLLM -> Local -> OpenAI
+            if self.settings.whisper_use_remote:
+                # Try vLLM next
+                if self.vllm_whisper_service and self.vllm_whisper_service.is_available():
+                    logger.warning(f"Remote Whisper failed ({e}), falling back to vLLM Whisper")
+                    return self.vllm_whisper_service.transcribe(audio_path)
+                # Try local next
+                elif self.local_whisper_service and self.local_whisper_service.is_available():
+                    logger.warning(f"Remote Whisper failed ({e}), falling back to local Whisper")
+                    return self.local_whisper_service.transcribe(audio_path)
+                # Then try OpenAI
+                elif self.whisper_service and self.whisper_service.is_available():
+                    logger.warning(f"Remote Whisper failed ({e}), falling back to OpenAI Whisper")
+                    return self.whisper_service.transcribe(audio_path)
+            elif self.settings.whisper_use_vllm:
                 # Try local next
                 if self.local_whisper_service and self.local_whisper_service.is_available():
                     logger.warning(f"vLLM Whisper failed ({e}), falling back to local Whisper")
@@ -136,15 +180,23 @@ class UnifiedWhisperService:
             raise RuntimeError("No Whisper service available")
 
         try:
-            # Priority 1: vLLM
-            if (self.settings.whisper_use_vllm and
+            # Priority 1: Remote Whisper
+            if (self.settings.whisper_use_remote and
+                self.remote_whisper_service and
+                self.remote_whisper_service.is_available() and
+                hasattr(self.remote_whisper_service, 'transcribe_with_progress')):
+                logger.info("Using remote Whisper service for streaming transcription")
+                async for progress_data in self.remote_whisper_service.transcribe_with_progress(audio_path):
+                    yield progress_data
+            # Priority 2: vLLM
+            elif (self.settings.whisper_use_vllm and
                 self.vllm_whisper_service and
                 self.vllm_whisper_service.is_available() and
                 hasattr(self.vllm_whisper_service, 'transcribe_with_progress')):
                 logger.info("Using vLLM Whisper service for streaming transcription")
                 async for progress_data in self.vllm_whisper_service.transcribe_with_progress(audio_path):
                     yield progress_data
-            # Priority 2: Local Whisper
+            # Priority 3: Local Whisper
             elif (self.settings.whisper_use_local and
                 self.local_whisper_service and
                 self.local_whisper_service.is_available() and
@@ -152,7 +204,7 @@ class UnifiedWhisperService:
                 logger.info("Using local Whisper service for streaming transcription")
                 async for progress_data in self.local_whisper_service.transcribe_with_progress(audio_path):
                     yield progress_data
-            # Priority 3: Fallback with simulated progress
+            # Priority 4: Fallback with simulated progress
             else:
                 # Fallback to regular transcription with simulated progress
                 logger.info("Using fallback transcription with simulated progress")
@@ -227,7 +279,11 @@ class UnifiedWhisperService:
     
     def get_model_info(self) -> Dict[str, Any]:
         """Get information about the active model"""
-        if self.settings.whisper_use_vllm and self.vllm_whisper_service and self.vllm_whisper_service.is_available():
+        if self.settings.whisper_use_remote and self.remote_whisper_service and self.remote_whisper_service.is_available():
+            info = self.remote_whisper_service.get_model_info()
+            info["service_type"] = "remote_whisper"
+            return info
+        elif self.settings.whisper_use_vllm and self.vllm_whisper_service and self.vllm_whisper_service.is_available():
             info = self.vllm_whisper_service.get_service_status()
             info["service_type"] = "vllm"
             return info
@@ -300,20 +356,29 @@ class UnifiedWhisperService:
         """Get status of all services"""
         # Determine current service
         current_service = "openai"  # default
-        if self.settings.whisper_use_vllm:
+        if self.settings.whisper_use_remote:
+            current_service = "remote_whisper"
+        elif self.settings.whisper_use_vllm:
             current_service = "vllm"
         elif self.settings.whisper_use_local:
             current_service = "local"
 
         status = {
             "current_service": current_service,
+            "remote_available": False,
             "vllm_available": False,
             "local_available": False,
             "openai_available": False,
+            "remote_info": None,
             "vllm_info": None,
             "local_model_info": None,
             "openai_model_info": None
         }
+
+        if self.remote_whisper_service:
+            status["remote_available"] = self.remote_whisper_service.is_available()
+            if status["remote_available"]:
+                status["remote_info"] = self.remote_whisper_service.get_model_info()
 
         if self.vllm_whisper_service:
             status["vllm_available"] = self.vllm_whisper_service.is_available()
