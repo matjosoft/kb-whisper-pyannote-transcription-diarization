@@ -31,9 +31,9 @@ class AudioScribeApp {
                     console.log('Loaded settings - revision:', revision);
 
                     // Hide revision dropdown if using remote whisper server
-                    // (revision is configured at server startup time)
+                    // (revision is configured at server startup time and we can't know what it is)
                     if (data.settings.whisper_use_remote) {
-                        this.hideRevisionSelectForRemote(revision);
+                        this.hideRevisionSelectForRemote();
                     }
                 }
             }
@@ -42,7 +42,7 @@ class AudioScribeApp {
         }
     }
 
-    hideRevisionSelectForRemote(currentRevision) {
+    hideRevisionSelectForRemote() {
         if (this.revisionSelect) {
             // Hide the select dropdown
             this.revisionSelect.style.display = 'none';
@@ -53,12 +53,10 @@ class AudioScribeApp {
                 label.style.display = 'none';
             }
 
-            // Update the description to show the pre-set revision
+            // Update the description - don't show revision value since we can't know what the remote server uses
             const description = this.revisionSelect.parentElement.querySelector('.option-description');
             if (description) {
-                const revisionDisplay = currentRevision === 'default' ? 'Default' :
-                                        currentRevision.charAt(0).toUpperCase() + currentRevision.slice(1);
-                description.innerHTML = `<strong>Model Revision pre-set in server:</strong> ${revisionDisplay}`;
+                description.innerHTML = `<strong>Model Revision:</strong> Pre-set in server`;
             }
         }
     }
