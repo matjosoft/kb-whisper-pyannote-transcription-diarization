@@ -30,10 +30,10 @@ class AudioScribeApp {
                     }
                     console.log('Loaded settings - revision:', revision);
 
-                    // Disable revision dropdown if using remote whisper server
+                    // Hide revision dropdown if using remote whisper server
                     // (revision is configured at server startup time)
                     if (data.settings.whisper_use_remote) {
-                        this.disableRevisionSelect('Remote server - revision set at server startup');
+                        this.hideRevisionSelectForRemote(revision);
                     }
                 }
             }
@@ -42,14 +42,23 @@ class AudioScribeApp {
         }
     }
 
-    disableRevisionSelect(reason) {
+    hideRevisionSelectForRemote(currentRevision) {
         if (this.revisionSelect) {
-            this.revisionSelect.disabled = true;
-            this.revisionSelect.title = reason;
-            // Update the description text to explain why it's disabled
+            // Hide the select dropdown
+            this.revisionSelect.style.display = 'none';
+
+            // Hide the label
+            const label = this.revisionSelect.parentElement.querySelector('.select-label');
+            if (label) {
+                label.style.display = 'none';
+            }
+
+            // Update the description to show the pre-set revision
             const description = this.revisionSelect.parentElement.querySelector('.option-description');
             if (description) {
-                description.textContent = `Revision selection is disabled: ${reason}. To change the revision, restart the remote whisper server with a different WHISPER_REVISION setting.`;
+                const revisionDisplay = currentRevision === 'default' ? 'Default' :
+                                        currentRevision.charAt(0).toUpperCase() + currentRevision.slice(1);
+                description.innerHTML = `<strong>Model Revision pre-set in server:</strong> ${revisionDisplay}`;
             }
         }
     }
