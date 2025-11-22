@@ -44,6 +44,9 @@ class Settings:
         self.whisper_remote_url = os.getenv("WHISPER_REMOTE_URL", "http://localhost:8002")
         self.whisper_revision = os.getenv("WHISPER_REVISION", "default")  # "default", "strict", or "subtitle"
 
+        # Remote Whisper chunking settings
+        self.remote_whisper_chunk_duration = int(os.getenv("REMOTE_WHISPER_CHUNK_DURATION", "30"))  # seconds per chunk
+
         # vLLM settings
         self.vllm_base_url = os.getenv("VLLM_BASE_URL", "http://localhost:8000/v1")
         self.vllm_api_key = os.getenv("VLLM_API_KEY", "token-abc123")
