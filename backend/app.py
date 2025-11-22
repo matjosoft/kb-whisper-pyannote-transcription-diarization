@@ -69,11 +69,14 @@ async def read_root(request: Request):
 
 @app.post("/api/upload")
 async def upload_audio(file: UploadFile = File(...)):
-    """Handle audio file upload"""
+    """Handle audio or video file upload"""
     try:
-        # Validate file type
-        if not file.content_type or not file.content_type.startswith('audio/'):
-            raise HTTPException(status_code=400, detail="File must be an audio file")
+        # Validate file type (accept both audio and video files)
+        # Video files will be converted to audio using ffmpeg
+        is_audio = file.content_type and file.content_type.startswith('audio/')
+        is_video = file.content_type and file.content_type.startswith('video/')
+        if not (is_audio or is_video):
+            raise HTTPException(status_code=400, detail="File must be an audio or video file")
         
         # Generate unique filename
         file_id = str(uuid.uuid4())
@@ -198,8 +201,19 @@ async def transcribe_audio_stream(file_id: str, transcription_only: bool = False
             # Send initial status
             yield f"data: {json.dumps({'status': 'starting', 'message': 'Preparing audio file...'})}\n\n"
             await asyncio.sleep(0.1)
-            
-            # Convert audio to WAV format if needed
+
+            # Check if this is a video file that needs conversion
+            video_extensions = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.mpeg', '.mpg', '.3gp']
+            is_video_file = audio_file.suffix.lower() in video_extensions
+
+            if is_video_file:
+                yield f"data: {json.dumps({'status': 'converting', 'message': 'Converting video to audio format...', 'is_video': True})}\n\n"
+                await asyncio.sleep(0.1)
+            elif audio_file.suffix.lower() != '.wav':
+                yield f"data: {json.dumps({'status': 'converting', 'message': 'Converting audio to WAV format...'})}\n\n"
+                await asyncio.sleep(0.1)
+
+            # Convert audio/video to WAV format if needed
             wav_path = audio_service.convert_to_wav(audio_file)
             
             # Get audio duration for progress calculation

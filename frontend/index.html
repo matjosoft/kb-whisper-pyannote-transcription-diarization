@@ -69,8 +69,9 @@
                 <div class="upload-area" id="uploadArea">
                     <div class="upload-content">
                         <span class="upload-icon">📁</span>
-                        <p>Drop audio file here or click to browse</p>
-                        <input type="file" id="fileInput" accept="audio/*" hidden>
+                        <p>Drop audio or video file here or click to browse</p>
+                        <span class="upload-formats">Supported: MP3, WAV, M4A, FLAC, OGG, MP4, AVI, MKV, MOV and more</span>
+                        <input type="file" id="fileInput" accept="audio/*,video/*" hidden>
                     </div>
                 </div>
             </section>
@@ -80,6 +81,12 @@
                 <div class="processing-content">
                     <div class="spinner"></div>
                     <p id="processingText">Processing audio...</p>
+
+                    <!-- Conversion Status (shown when converting video/audio) -->
+                    <div class="conversion-status hidden" id="conversionStatus">
+                        <div class="conversion-spinner"></div>
+                        <span class="conversion-text" id="conversionText">Converting file...</span>
+                    </div>
                     
                     <!-- Chunk Progress Visualization -->
                     <div class="chunk-progress-container hidden" id="chunkProgressContainer">
