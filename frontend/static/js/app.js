@@ -29,10 +29,28 @@ class AudioScribeApp {
                         this.revisionSelect.value = revision;
                     }
                     console.log('Loaded settings - revision:', revision);
+
+                    // Disable revision dropdown if using remote whisper server
+                    // (revision is configured at server startup time)
+                    if (data.settings.whisper_use_remote) {
+                        this.disableRevisionSelect('Remote server - revision set at server startup');
+                    }
                 }
             }
         } catch (error) {
             console.error('Failed to load settings:', error);
+        }
+    }
+
+    disableRevisionSelect(reason) {
+        if (this.revisionSelect) {
+            this.revisionSelect.disabled = true;
+            this.revisionSelect.title = reason;
+            // Update the description text to explain why it's disabled
+            const description = this.revisionSelect.parentElement.querySelector('.option-description');
+            if (description) {
+                description.textContent = `Revision selection is disabled: ${reason}. To change the revision, restart the remote whisper server with a different WHISPER_REVISION setting.`;
+            }
         }
     }
 

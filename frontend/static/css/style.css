@@ -325,6 +325,17 @@ body {
     padding: var(--spacing-sm);
 }
 
+.settings-select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: var(--color-background-elevated);
+}
+
+.settings-select:disabled:hover {
+    border-color: var(--color-border);
+    background-color: var(--color-background-elevated);
+}
+
 /* Recording Section */
 .recording-section {
     background: var(--color-surface);
