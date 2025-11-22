@@ -109,35 +109,38 @@ class WhisperServer:
             # Determine torch dtype based on device
             torch_dtype = torch.float16 if self.device == "cuda" else torch.float32
 
-            # Build model loading kwargs
-            model_kwargs = {
-                "torch_dtype": torch_dtype,
-                "use_safetensors": True,
-                "low_cpu_mem_usage": True,
-                "token": self.hf_auth_token
-            }
-
-            # Only add revision if not "default"
+            # Load model with explicit revision parameter
             if self.revision and self.revision != "default":
-                model_kwargs["revision"] = self.revision
                 logger.info(f"Loading model with revision: {self.revision}")
+                self.model = AutoModelForSpeechSeq2Seq.from_pretrained(
+                    self.model_name,
+                    torch_dtype=torch_dtype,
+                    use_safetensors=True,
+                    low_cpu_mem_usage=True,
+                    token=self.hf_auth_token,
+                    revision=self.revision
+                )
+                self.processor = AutoProcessor.from_pretrained(
+                    self.model_name,
+                    token=self.hf_auth_token,
+                    revision=self.revision
+                )
             else:
                 logger.info("Loading model with default revision")
-
-            # Load the model with safetensors
-            self.model = AutoModelForSpeechSeq2Seq.from_pretrained(
-                self.model_name,
-                **model_kwargs
-            )
+                self.model = AutoModelForSpeechSeq2Seq.from_pretrained(
+                    self.model_name,
+                    torch_dtype=torch_dtype,
+                    use_safetensors=True,
+                    low_cpu_mem_usage=True,
+                    token=self.hf_auth_token
+                )
+                self.processor = AutoProcessor.from_pretrained(
+                    self.model_name,
+                    token=self.hf_auth_token
+                )
 
             # Move model to device
             self.model.to(self.device)
-
-            # Load processor
-            self.processor = AutoProcessor.from_pretrained(
-                self.model_name,
-                token=self.hf_auth_token
-            )
 
             # Create pipeline for easier inference
             self.pipe = pipeline(

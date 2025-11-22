@@ -351,6 +351,20 @@ async def health_check():
         "pyannote": pyannote_service.is_available()
     }}
 
+@app.get("/api/settings")
+async def get_settings_endpoint():
+    """Get current application settings for the frontend"""
+    return JSONResponse({
+        "success": True,
+        "settings": {
+            "whisper_revision": settings.whisper_revision,
+            "whisper_language": settings.whisper_language,
+            "whisper_use_local": settings.whisper_use_local,
+            "whisper_use_remote": settings.whisper_use_remote,
+            "whisper_use_vllm": settings.whisper_use_vllm
+        }
+    })
+
 @app.get("/api/whisper/status")
 async def get_whisper_status():
     """Get detailed status of Whisper services"""

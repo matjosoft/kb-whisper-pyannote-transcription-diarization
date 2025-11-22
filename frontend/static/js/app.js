@@ -13,6 +13,27 @@ class AudioScribeApp {
         this.setupEventListeners();
         this.initializeRecorder();
         this.initializeKaraokePlayer();
+        this.loadSettings();
+    }
+
+    async loadSettings() {
+        try {
+            const response = await fetch('/api/settings');
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.settings) {
+                    // Pre-select revision dropdown based on environment variable
+                    const revision = data.settings.whisper_revision || 'default';
+                    this.selectedRevision = revision;
+                    if (this.revisionSelect) {
+                        this.revisionSelect.value = revision;
+                    }
+                    console.log('Loaded settings - revision:', revision);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load settings:', error);
+        }
     }
 
     initializeElements() {
@@ -296,9 +317,8 @@ class AudioScribeApp {
             if (this.transcriptionOnlyMode) {
                 params.append('transcription_only', 'true');
             }
-            if (this.selectedRevision && this.selectedRevision !== 'default') {
-                params.append('revision', this.selectedRevision);
-            }
+            // Always pass revision to ensure user selection overrides environment settings
+            params.append('revision', this.selectedRevision || 'default');
             const queryString = params.toString() ? `?${params.toString()}` : '';
             const eventSource = new EventSource(`/api/transcribe-stream/${fileId}${queryString}`);
             let finalResult = null;

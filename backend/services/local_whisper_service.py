@@ -39,23 +39,28 @@ class LocalWhisperService:
         # Determine revision to use
         revision_to_use = revision or self.settings.whisper_revision
 
-        # Build model loading kwargs
-        model_kwargs = {
-            "torch_dtype": torch_dtype,
-            "use_safetensors": True,
-            "cache_dir": "cache"
-        }
-
-        # Only add revision if not "default"
+        # Load model with explicit revision parameter
         if revision_to_use and revision_to_use != "default":
-            model_kwargs["revision"] = revision_to_use
             logger.info(f"Loading model with revision: {revision_to_use}")
+            self.model = AutoModelForSpeechSeq2Seq.from_pretrained(
+                model_id,
+                torch_dtype=torch_dtype,
+                use_safetensors=True,
+                cache_dir="cache",
+                revision=revision_to_use
+            )
+            self.processor = AutoProcessor.from_pretrained(model_id, revision=revision_to_use)
         else:
             logger.info("Loading model with default revision")
+            self.model = AutoModelForSpeechSeq2Seq.from_pretrained(
+                model_id,
+                torch_dtype=torch_dtype,
+                use_safetensors=True,
+                cache_dir="cache"
+            )
+            self.processor = AutoProcessor.from_pretrained(model_id)
 
-        self.model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, **model_kwargs)
         self.model.to(device)
-        self.processor = AutoProcessor.from_pretrained(model_id)
 
         self.pipe = pipeline(
             "automatic-speech-recognition",
