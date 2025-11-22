@@ -30,15 +30,30 @@ class LocalWhisperService:
         #self._load_model()
         self._load_safetensors_whisper()
 
-    def _load_safetensors_whisper(self):
+    def _load_safetensors_whisper(self, revision: str = None):
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
         torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
         model_id = "KBLab/kb-whisper-large"
 
-        self.model = AutoModelForSpeechSeq2Seq.from_pretrained(
-            model_id, torch_dtype=torch_dtype, use_safetensors=True, cache_dir="cache", revision="strict"
-        )
+        # Determine revision to use
+        revision_to_use = revision or self.settings.whisper_revision
+
+        # Build model loading kwargs
+        model_kwargs = {
+            "torch_dtype": torch_dtype,
+            "use_safetensors": True,
+            "cache_dir": "cache"
+        }
+
+        # Only add revision if not "default"
+        if revision_to_use and revision_to_use != "default":
+            model_kwargs["revision"] = revision_to_use
+            logger.info(f"Loading model with revision: {revision_to_use}")
+        else:
+            logger.info("Loading model with default revision")
+
+        self.model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, **model_kwargs)
         self.model.to(device)
         self.processor = AutoProcessor.from_pretrained(model_id)
 
@@ -368,13 +383,14 @@ class LocalWhisperService:
         """Get information about the loaded model"""
         if not self.is_available():
             return {"available": False}
-        
+
         return {
             "available": True,
             "model_name": self._get_model_path(),
             "model_type": "local_whisper",
             "device": self.settings.device,
             "language": self.settings.whisper_language,
+            "revision": self.settings.whisper_revision,
             "torch_dtype": str(self.model.dtype) if self.model else "unknown"
         }
     

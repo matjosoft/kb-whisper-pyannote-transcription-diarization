@@ -170,9 +170,17 @@ import asyncio
 import json
 
 @app.get("/api/transcribe-stream/{file_id}")
-async def transcribe_audio_stream(file_id: str, transcription_only: bool = False):
+async def transcribe_audio_stream(file_id: str, transcription_only: bool = False, revision: str = None):
     """Transcribe and diarize audio file with streaming progress updates"""
-    logger.info(f"Starting streaming transcription for file_id: {file_id}, transcription_only: {transcription_only}")
+    logger.info(f"Starting streaming transcription for file_id: {file_id}, transcription_only: {transcription_only}, revision: {revision}")
+
+    # Update revision setting if provided
+    if revision:
+        if hasattr(whisper_service, 'set_revision'):
+            whisper_service.set_revision(revision)
+        else:
+            settings.whisper_revision = revision
+            logger.info(f"Revision setting updated to: {revision}")
     
     async def generate_progress():
         try:

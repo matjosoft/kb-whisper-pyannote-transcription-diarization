@@ -6,13 +6,14 @@ This service runs independently and provides speech transcription via REST API.
 It can be deployed on a separate machine with GPU resources.
 
 Usage:
-    python whisper_server.py [--host HOST] [--port PORT] [--device DEVICE]
+    python whisper_server.py [--host HOST] [--port PORT] [--device DEVICE] [--revision REVISION]
 
 Environment Variables:
     WHISPER_MODEL: Model to use (default: KBLab/kb-whisper-large)
     HF_AUTH_TOKEN: HuggingFace authentication token (optional for some models)
     DEVICE: Device to use (cuda/cpu/mps, auto-detected if not set)
     WHISPER_LANGUAGE: Language code (default: sv for Swedish, or 'auto')
+    WHISPER_REVISION: Model revision (default, strict, or subtitle)
 """
 
 import os
@@ -55,7 +56,8 @@ class WhisperServer:
     def __init__(self,
                  model_name: str = None,
                  device: str = None,
-                 language: str = None):
+                 language: str = None,
+                 revision: str = None):
         """
         Initialize the Whisper server
 
@@ -63,10 +65,12 @@ class WhisperServer:
             model_name: Model to use for transcription
             device: Device to use (cuda/cpu/mps)
             language: Language code (e.g., 'sv', 'en', 'auto')
+            revision: Model revision ('default', 'strict', 'subtitle')
         """
         self.model_name = model_name or os.getenv("WHISPER_MODEL", "KBLab/kb-whisper-large")
         self.device = device or self._get_device()
         self.language = language or os.getenv("WHISPER_LANGUAGE", "sv")
+        self.revision = revision or os.getenv("WHISPER_REVISION", "default")
         self.processor: Optional[AutoProcessor] = None
         self.model: Optional[AutoModelForSpeechSeq2Seq] = None
         self.pipe: Optional[pipeline] = None
@@ -76,6 +80,7 @@ class WhisperServer:
         logger.info(f"Model: {self.model_name}")
         logger.info(f"Device: {self.device}")
         logger.info(f"Language: {self.language}")
+        logger.info(f"Revision: {self.revision}")
 
         self._load_model()
 
@@ -104,13 +109,25 @@ class WhisperServer:
             # Determine torch dtype based on device
             torch_dtype = torch.float16 if self.device == "cuda" else torch.float32
 
+            # Build model loading kwargs
+            model_kwargs = {
+                "torch_dtype": torch_dtype,
+                "use_safetensors": True,
+                "low_cpu_mem_usage": True,
+                "token": self.hf_auth_token
+            }
+
+            # Only add revision if not "default"
+            if self.revision and self.revision != "default":
+                model_kwargs["revision"] = self.revision
+                logger.info(f"Loading model with revision: {self.revision}")
+            else:
+                logger.info("Loading model with default revision")
+
             # Load the model with safetensors
             self.model = AutoModelForSpeechSeq2Seq.from_pretrained(
                 self.model_name,
-                torch_dtype=torch_dtype,
-                use_safetensors=True,
-                low_cpu_mem_usage=True,
-                token=self.hf_auth_token
+                **model_kwargs
             )
 
             # Move model to device
@@ -264,6 +281,7 @@ class WhisperServer:
             "model_name": self.model_name,
             "device": self.device,
             "language": self.language,
+            "revision": self.revision,
             "cuda_available": torch.cuda.is_available(),
             "cuda_device": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
             "torch_dtype": str(self.model.dtype) if self.model else None
@@ -397,14 +415,16 @@ Environment Variables:
   HF_AUTH_TOKEN      HuggingFace authentication token (optional)
   DEVICE             Device to use (cuda/cpu/mps, auto-detected if not set)
   WHISPER_LANGUAGE   Language code (default: sv for Swedish, or 'auto')
+  WHISPER_REVISION   Model revision (default, strict, or subtitle)
 
 Example:
   python whisper_server.py --host 0.0.0.0 --port 8002
 
-  # With custom model
+  # With custom model and revision
   export WHISPER_MODEL=openai/whisper-large-v3
   export HF_AUTH_TOKEN=your_token_here
   export WHISPER_LANGUAGE=en
+  export WHISPER_REVISION=strict
   python whisper_server.py
         """
     )
@@ -437,6 +457,13 @@ Example:
     )
 
     parser.add_argument(
+        "--revision",
+        type=str,
+        choices=["default", "strict", "subtitle"],
+        help="Model revision to use ('default', 'strict', 'subtitle')"
+    )
+
+    parser.add_argument(
         "--reload",
         action="store_true",
         help="Enable auto-reload for development"
@@ -452,6 +479,10 @@ Example:
     if args.language:
         os.environ["WHISPER_LANGUAGE"] = args.language
 
+    # Set revision if specified
+    if args.revision:
+        os.environ["WHISPER_REVISION"] = args.revision
+
     # Check for HF token (optional for some models)
     if not os.getenv("HF_AUTH_TOKEN"):
         logger.info("ℹ️  HF_AUTH_TOKEN not set (optional for some models)")
@@ -464,6 +495,7 @@ Example:
     print(f"Port: {args.port}")
     print(f"Model: {os.getenv('WHISPER_MODEL', 'KBLab/kb-whisper-large')}")
     print(f"Language: {os.getenv('WHISPER_LANGUAGE', 'sv')}")
+    print(f"Revision: {os.getenv('WHISPER_REVISION', 'default')}")
     print("="*60 + "\n")
 
     # Run the server

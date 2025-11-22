@@ -32,6 +32,17 @@
                         </label>
                         <p class="option-description">When enabled, only transcription will be performed. Speaker identification will be skipped, making the process faster.</p>
                     </div>
+                    <div class="settings-option">
+                        <label class="select-label" for="revisionSelect">
+                            <span class="select-text">Model Revision</span>
+                        </label>
+                        <select id="revisionSelect" class="settings-select">
+                            <option value="default">Default</option>
+                            <option value="strict">Strict</option>
+                            <option value="subtitle">Subtitle</option>
+                        </select>
+                        <p class="option-description">Select the model revision for transcription. 'Strict' provides more precise transcription, 'Subtitle' is optimized for subtitle generation.</p>
+                    </div>
                 </div>
             </section>
 

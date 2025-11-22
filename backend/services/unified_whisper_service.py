@@ -352,6 +352,48 @@ class UnifiedWhisperService:
             logger.error(f"Failed to download local model: {e}")
             return False
     
+    def get_current_revision(self) -> str:
+        """Get the current revision setting"""
+        return self.settings.whisper_revision
+
+    def set_revision(self, revision: str) -> bool:
+        """
+        Set the revision for the whisper model.
+        Note: For local service, this will reload the model.
+        For remote service, the server must be restarted with the new revision.
+
+        Args:
+            revision: The revision to use ('default', 'strict', 'subtitle')
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if revision not in ['default', 'strict', 'subtitle']:
+            logger.error(f"Invalid revision: {revision}. Must be 'default', 'strict', or 'subtitle'")
+            return False
+
+        old_revision = self.settings.whisper_revision
+        self.settings.whisper_revision = revision
+
+        # If using local service and revision changed, reinitialize
+        if self.settings.whisper_use_local and old_revision != revision:
+            logger.info(f"Revision changed from '{old_revision}' to '{revision}', reloading local model...")
+            try:
+                from .local_whisper_service import LocalWhisperService
+                self.local_whisper_service = LocalWhisperService()
+                if self.local_whisper_service.is_available():
+                    logger.info(f"Local Whisper model reloaded with revision: {revision}")
+                    return True
+                else:
+                    logger.error("Failed to reload local Whisper model")
+                    return False
+            except Exception as e:
+                logger.error(f"Failed to reload local Whisper model: {e}")
+                return False
+
+        logger.info(f"Revision set to: {revision}")
+        return True
+
     def get_service_status(self) -> Dict[str, Any]:
         """Get status of all services"""
         # Determine current service
@@ -365,6 +407,7 @@ class UnifiedWhisperService:
 
         status = {
             "current_service": current_service,
+            "revision": self.settings.whisper_revision,
             "remote_available": False,
             "vllm_available": False,
             "local_available": False,

@@ -7,6 +7,7 @@ class AudioScribeApp {
         this.karaokePlayer = null;
         this.currentAudioFile = null;
         this.transcriptionOnlyMode = false;
+        this.selectedRevision = 'default';
 
         this.initializeElements();
         this.setupEventListeners();
@@ -17,6 +18,7 @@ class AudioScribeApp {
     initializeElements() {
         // Settings elements
         this.transcriptionOnlyToggle = document.getElementById('transcriptionOnlyToggle');
+        this.revisionSelect = document.getElementById('revisionSelect');
 
         // Recording elements
         this.recordBtn = document.getElementById('recordBtn');
@@ -48,6 +50,12 @@ class AudioScribeApp {
         this.transcriptionOnlyToggle.addEventListener('change', (e) => {
             this.transcriptionOnlyMode = e.target.checked;
             this.updateSpeakerCheckboxState();
+        });
+
+        // Revision select
+        this.revisionSelect.addEventListener('change', (e) => {
+            this.selectedRevision = e.target.value;
+            console.log('Revision selected:', this.selectedRevision);
         });
 
         // Recording button
@@ -284,8 +292,15 @@ class AudioScribeApp {
     async transcribeWithStreaming(fileId) {
         return new Promise((resolve, reject) => {
             console.log('Attempting streaming transcription...');
-            const transcriptionOnlyParam = this.transcriptionOnlyMode ? '?transcription_only=true' : '';
-            const eventSource = new EventSource(`/api/transcribe-stream/${fileId}${transcriptionOnlyParam}`);
+            const params = new URLSearchParams();
+            if (this.transcriptionOnlyMode) {
+                params.append('transcription_only', 'true');
+            }
+            if (this.selectedRevision && this.selectedRevision !== 'default') {
+                params.append('revision', this.selectedRevision);
+            }
+            const queryString = params.toString() ? `?${params.toString()}` : '';
+            const eventSource = new EventSource(`/api/transcribe-stream/${fileId}${queryString}`);
             let finalResult = null;
             let hasReceivedData = false;
             
