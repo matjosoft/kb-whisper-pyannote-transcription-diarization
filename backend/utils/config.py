@@ -37,6 +37,7 @@ class Settings:
         self.whisper_local_model_path = os.getenv("WHISPER_LOCAL_MODEL_PATH", f"D:\Develop\AI\kb-whisper\model\model.safetensors")
         self.whisper_local_model_name = os.getenv("WHISPER_LOCAL_MODEL_NAME", "KBLab/kb-whisper-large")
         self.whisper_remote_url = os.getenv("WHISPER_REMOTE_URL", "http://localhost:8002")
+        self.whisper_revision = os.getenv("WHISPER_REVISION", "default")  # "default", "strict", or "subtitle"
 
         # vLLM settings
         self.vllm_base_url = os.getenv("VLLM_BASE_URL", "http://localhost:8000/v1")

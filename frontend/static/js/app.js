@@ -7,16 +7,64 @@ class AudioScribeApp {
         this.karaokePlayer = null;
         this.currentAudioFile = null;
         this.transcriptionOnlyMode = false;
+        this.selectedRevision = 'default';
 
         this.initializeElements();
         this.setupEventListeners();
         this.initializeRecorder();
         this.initializeKaraokePlayer();
+        this.loadSettings();
+    }
+
+    async loadSettings() {
+        try {
+            const response = await fetch('/api/settings');
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.settings) {
+                    // Pre-select revision dropdown based on environment variable
+                    const revision = data.settings.whisper_revision || 'default';
+                    this.selectedRevision = revision;
+                    if (this.revisionSelect) {
+                        this.revisionSelect.value = revision;
+                    }
+                    console.log('Loaded settings - revision:', revision);
+
+                    // Hide revision dropdown if using remote whisper server
+                    // (revision is configured at server startup time and we can't know what it is)
+                    if (data.settings.whisper_use_remote) {
+                        this.hideRevisionSelectForRemote();
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load settings:', error);
+        }
+    }
+
+    hideRevisionSelectForRemote() {
+        if (this.revisionSelect) {
+            // Hide the select dropdown
+            this.revisionSelect.style.display = 'none';
+
+            // Hide the label
+            const label = this.revisionSelect.parentElement.querySelector('.select-label');
+            if (label) {
+                label.style.display = 'none';
+            }
+
+            // Update the description - don't show revision value since we can't know what the remote server uses
+            const description = this.revisionSelect.parentElement.querySelector('.option-description');
+            if (description) {
+                description.innerHTML = `<strong>Model Revision:</strong> Pre-set in server`;
+            }
+        }
     }
 
     initializeElements() {
         // Settings elements
         this.transcriptionOnlyToggle = document.getElementById('transcriptionOnlyToggle');
+        this.revisionSelect = document.getElementById('revisionSelect');
 
         // Recording elements
         this.recordBtn = document.getElementById('recordBtn');
@@ -48,6 +96,12 @@ class AudioScribeApp {
         this.transcriptionOnlyToggle.addEventListener('change', (e) => {
             this.transcriptionOnlyMode = e.target.checked;
             this.updateSpeakerCheckboxState();
+        });
+
+        // Revision select
+        this.revisionSelect.addEventListener('change', (e) => {
+            this.selectedRevision = e.target.value;
+            console.log('Revision selected:', this.selectedRevision);
         });
 
         // Recording button
@@ -284,8 +338,14 @@ class AudioScribeApp {
     async transcribeWithStreaming(fileId) {
         return new Promise((resolve, reject) => {
             console.log('Attempting streaming transcription...');
-            const transcriptionOnlyParam = this.transcriptionOnlyMode ? '?transcription_only=true' : '';
-            const eventSource = new EventSource(`/api/transcribe-stream/${fileId}${transcriptionOnlyParam}`);
+            const params = new URLSearchParams();
+            if (this.transcriptionOnlyMode) {
+                params.append('transcription_only', 'true');
+            }
+            // Always pass revision to ensure user selection overrides environment settings
+            params.append('revision', this.selectedRevision || 'default');
+            const queryString = params.toString() ? `?${params.toString()}` : '';
+            const eventSource = new EventSource(`/api/transcribe-stream/${fileId}${queryString}`);
             let finalResult = null;
             let hasReceivedData = false;
             

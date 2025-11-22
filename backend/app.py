@@ -170,9 +170,17 @@ import asyncio
 import json
 
 @app.get("/api/transcribe-stream/{file_id}")
-async def transcribe_audio_stream(file_id: str, transcription_only: bool = False):
+async def transcribe_audio_stream(file_id: str, transcription_only: bool = False, revision: str = None):
     """Transcribe and diarize audio file with streaming progress updates"""
-    logger.info(f"Starting streaming transcription for file_id: {file_id}, transcription_only: {transcription_only}")
+    logger.info(f"Starting streaming transcription for file_id: {file_id}, transcription_only: {transcription_only}, revision: {revision}")
+
+    # Update revision setting if provided
+    if revision:
+        if hasattr(whisper_service, 'set_revision'):
+            whisper_service.set_revision(revision)
+        else:
+            settings.whisper_revision = revision
+            logger.info(f"Revision setting updated to: {revision}")
     
     async def generate_progress():
         try:
@@ -342,6 +350,20 @@ async def health_check():
         "whisper": whisper_service.is_available(),
         "pyannote": pyannote_service.is_available()
     }}
+
+@app.get("/api/settings")
+async def get_settings_endpoint():
+    """Get current application settings for the frontend"""
+    return JSONResponse({
+        "success": True,
+        "settings": {
+            "whisper_revision": settings.whisper_revision,
+            "whisper_language": settings.whisper_language,
+            "whisper_use_local": settings.whisper_use_local,
+            "whisper_use_remote": settings.whisper_use_remote,
+            "whisper_use_vllm": settings.whisper_use_vllm
+        }
+    })
 
 @app.get("/api/whisper/status")
 async def get_whisper_status():
