@@ -26,7 +26,12 @@ class Settings:
     def __init__(self):
         # Audio processing settings
         self.max_file_size = int(os.getenv("MAX_FILE_SIZE", 100 * 1024 * 1024))  # 100MB
-        self.supported_formats = [".wav", ".mp3", ".m4a", ".flac", ".ogg", ".webm"]
+        # Audio formats
+        self.supported_audio_formats = [".wav", ".mp3", ".m4a", ".flac", ".ogg", ".webm", ".aac", ".wma"]
+        # Video formats (will be converted to audio via ffmpeg)
+        self.supported_video_formats = [".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv", ".mpeg", ".mpg", ".3gp"]
+        # Combined supported formats
+        self.supported_formats = self.supported_audio_formats + self.supported_video_formats
         
         # Whisper settings
         self.whisper_model = os.getenv("WHISPER_MODEL", "base")  # tiny, base, small, medium, large

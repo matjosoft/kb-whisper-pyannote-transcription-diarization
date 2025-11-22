@@ -27,26 +27,36 @@ class AudioService:
     def __init__(self):
         self.settings = get_settings()
     
+    # Video formats that ffmpeg can extract audio from
+    VIDEO_FORMATS = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.mpeg', '.mpg', '.3gp']
+
     def convert_to_wav(self, input_path: Path) -> Path:
         """
-        Convert audio file to WAV format for consistent processing
-        
+        Convert audio or video file to WAV format for consistent processing.
+        For video files, extracts the audio track.
+
         Args:
-            input_path: Path to the input audio file
-            
+            input_path: Path to the input audio/video file
+
         Returns:
             Path to the converted WAV file
         """
         if input_path.suffix.lower() == '.wav':
             return input_path
-        
+
+        is_video = input_path.suffix.lower() in self.VIDEO_FORMATS
+
         try:
             # Create output path
             output_path = input_path.with_suffix('.wav')
-            
-            logger.info(f"Converting {input_path} to WAV format")
-            
-            # Use ffmpeg to convert to WAV
+
+            if is_video:
+                logger.info(f"Extracting audio from video file: {input_path}")
+            else:
+                logger.info(f"Converting audio file to WAV format: {input_path}")
+
+            # Use ffmpeg to convert to WAV (works for both audio and video)
+            # For video files, ffmpeg automatically extracts the audio track
             (
                 ffmpeg
                 .input(str(input_path))
@@ -59,13 +69,17 @@ class AudioService:
                 .overwrite_output()
                 .run(quiet=True)
             )
-            
-            logger.info(f"Audio converted successfully to {output_path}")
+
+            if is_video:
+                logger.info(f"Audio extracted successfully from video to {output_path}")
+            else:
+                logger.info(f"Audio converted successfully to {output_path}")
             return output_path
-            
+
         except Exception as e:
-            logger.error(f"Audio conversion failed: {e}")
-            raise RuntimeError(f"Failed to convert audio: {str(e)}")
+            file_type = "video" if is_video else "audio"
+            logger.error(f"{file_type.capitalize()} conversion failed: {e}")
+            raise RuntimeError(f"Failed to convert {file_type}: {str(e)}")
     
     def get_audio_info(self, audio_path: Path) -> Dict[str, Any]:
         """

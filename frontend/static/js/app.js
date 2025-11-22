@@ -234,21 +234,30 @@ class AudioScribeApp {
     }
 
     handleFile(file) {
-        // Validate file type
-        if (!file.type.startsWith('audio/')) {
-            window.toast.warning('Invalid File Type', 'Please select an audio file');
+        // Validate file type (accept both audio and video files)
+        const isAudio = file.type.startsWith('audio/');
+        const isVideo = file.type.startsWith('video/');
+
+        if (!isAudio && !isVideo) {
+            window.toast.warning('Invalid File Type', 'Please select an audio or video file');
             return;
         }
 
-        // Validate file size (100MB limit)
+        // Validate file size (800MB limit)
         const maxSize = 800 * 1024 * 1024;
         if (file.size > maxSize) {
             window.toast.warning('File Too Large', 'File size must be less than 800MB');
             return;
         }
 
-        // Store the audio file for karaoke player
+        // Store the file for karaoke player (will work after conversion for video)
         this.currentAudioFile = file;
+
+        // Show appropriate message for video files
+        if (isVideo) {
+            window.toast.info('Video File Detected', 'Audio will be extracted from the video file');
+        }
+
         this.processAudio(file, 'upload');
     }
 
@@ -457,36 +466,66 @@ class AudioScribeApp {
     
     updateTranscriptionProgress(data) {
         console.log('Updating transcription progress:', data);
-        
+
         const progressStats = document.getElementById('progressStats');
         const progressTime = document.getElementById('progressTime');
         const currentChunkText = document.getElementById('currentChunkText');
         const overallProgressFill = document.getElementById('overallProgressFill');
         const overallProgressPercentage = document.getElementById('overallProgressPercentage');
         const chunksVisualization = document.getElementById('chunksVisualization');
-        
+        const conversionStatus = document.getElementById('conversionStatus');
+        const conversionText = document.getElementById('conversionText');
+
         console.log('Progress elements found:', {
             progressStats: !!progressStats,
             progressTime: !!progressTime,
             currentChunkText: !!currentChunkText,
             overallProgressFill: !!overallProgressFill,
             overallProgressPercentage: !!overallProgressPercentage,
-            chunksVisualization: !!chunksVisualization
+            chunksVisualization: !!chunksVisualization,
+            conversionStatus: !!conversionStatus
         });
-        
+
         // Update current status message
         if (currentChunkText) {
             currentChunkText.textContent = data.message || 'Processing...';
         }
-        
+
         switch (data.status) {
             case 'starting':
                 if (currentChunkText) {
                     currentChunkText.textContent = data.message;
                 }
+                // Hide conversion status if visible
+                if (conversionStatus) {
+                    conversionStatus.classList.add('hidden');
+                }
+                break;
+
+            case 'converting':
+                // Show conversion status with spinner
+                if (conversionStatus) {
+                    conversionStatus.classList.remove('hidden');
+                    // Add 'video' class if it's a video file
+                    if (data.is_video) {
+                        conversionStatus.classList.add('video');
+                    } else {
+                        conversionStatus.classList.remove('video');
+                    }
+                }
+                if (conversionText) {
+                    conversionText.textContent = data.message || 'Converting file...';
+                }
+                if (this.processingText) {
+                    this.processingText.textContent = data.is_video ? 'Extracting audio from video...' : 'Converting audio format...';
+                }
                 break;
                 
             case 'transcribing':
+                // Hide conversion status when transcription starts
+                if (conversionStatus) {
+                    conversionStatus.classList.add('hidden');
+                }
                 if (data.total_chunks && data.duration) {
                     if (progressStats) {
                         progressStats.textContent = `0 / ${data.total_chunks} chunks processed`;
@@ -494,7 +533,7 @@ class AudioScribeApp {
                     if (progressTime) {
                         progressTime.textContent = `Duration: ${data.duration.toFixed(1)}s`;
                     }
-                    
+
                     // Create chunk blocks
                     this.createChunkBlocks(data.total_chunks);
                 }
@@ -593,11 +632,18 @@ class AudioScribeApp {
 
     hideProcessing() {
         this.processingSection.classList.add('hidden');
-        
+
         // Also hide chunk progress
         const chunkProgressContainer = document.getElementById('chunkProgressContainer');
         if (chunkProgressContainer) {
             chunkProgressContainer.classList.add('hidden');
+        }
+
+        // Hide conversion status
+        const conversionStatus = document.getElementById('conversionStatus');
+        if (conversionStatus) {
+            conversionStatus.classList.add('hidden');
+            conversionStatus.classList.remove('video');
         }
     }
 
